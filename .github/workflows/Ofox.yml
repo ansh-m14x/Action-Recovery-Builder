@@ -1,98 +1,83 @@
-name: OrangeFox Recovery Build - Oppo A31
+name: PitchBlack Recovery Project Builder
 
 on:
   workflow_dispatch:
     inputs:
-      DEVICE_TREE_URL:
-        description: 'Device Tree URL'
+      MANIFEST_BRANCH:
+        description: 'PBRP Manifest Branch'
+        required: true
+        default: 'android-9.0'
+        type: choice
+        options:
+        - android-12.1
+        - android-11.0
+        - android-10.0
+        - android-9.0
+      DEVICE_TREE:
+        description: 'Custom Recovery Tree URL'
         required: true
         default: 'https://github.com/Ansh-m14x/android-recovery-OP4C7D'
       DEVICE_TREE_BRANCH:
         description: 'Device Tree Branch'
         required: true
         default: 'pbrp'
-      DEVICE_PATH:
-        description: 'Sync Path'
+      BUILD_TARGET:
+        description: 'Build Target'
         required: true
-        default: 'device/oppo/OP4C7D'
-      DEVICE_NAME:
-        description: 'Device Name'
-        required: true
-        default: 'OP4C7D'
+        default: 'pbrp'
+        type: choice
+        options:
+        - pbrp
+        - recovery
 
 jobs:
   build:
+    name: Build PBRP by ${{ github.actor }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
+      
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Initial Setup
+      run: |
+        echo "BUILD_START=$(date +%s)" >> $GITHUB_ENV
+        echo "BUILD_DATE=$(TZ=UTC date +%Y%m%d)" >> $GITHUB_ENV
+        
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      - name: Cleanup Space
-        run: |
-          sudo rm -rf /usr/share/dotnet /etc/mysql /usr/local/lib/android /opt/ghc
-          sudo apt clean
+    - name: Clean-up
+      uses: rokibhasansagar/slimhub_actions@main
 
-      - name: Install Build Packages
-        run: |
-          sudo apt-get update
-          sudo apt-get -y install libncurses5 python2 python3 git ccache automake \
-          flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib \
-          libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools \
-          pngcrush xz-utils schedtool dpkg-dev liblz4-tool make optipng maven \
-          libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl \
-          libxml-simple-perl bc libc6-dev-i386 lib32ncurses5-dev libx11-dev \
-          lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler libtinfo5
-          sudo ln -sf /usr/bin/python2 /usr/bin/python
+    - name: Swap Space
+      uses: pierotofy/set-swap-space@master
+      with:
+        swap-size-gb: 24
 
-      - name: Install OpenJDK 8
-        uses: actions/setup-java@v4
-        with:
-          distribution: zulu
-          java-version: 8
-
-      - name: Install Repo Tool
-        run: |
-          mkdir -p ~/bin
-          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
-          chmod a+x ~/bin/repo
-          sudo ln -sf ~/bin/repo /usr/bin/repo
-
-      - name: Initialize & Sync OrangeFox Source
-        run: |
-          mkdir workspace && cd workspace
-          git config --global user.name "Ansh_m14x"
-          git config --global user.email "ansh@example.com"
-          # Using OrangeFox Manifest for proper recovery support
-          repo init --depth=1 -u https://gitlab.com/OrangeFox/Manifest.git -b fox_9.0
-          repo sync -c -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
-
-      - name: Clone Device Tree
-        run: |
-          git clone ${{ inputs.DEVICE_TREE_URL }} -b ${{ inputs.DEVICE_TREE_BRANCH }} workspace/${{ inputs.DEVICE_PATH }}
-
-      - name: Build OrangeFox
-        run: |
-          cd workspace
-          export ALLOW_MISSING_DEPENDENCIES=true
-          export LC_ALL=C
-          # OrangeFox specific environment variables
-          export FOX_VERSION="R11.1"
-          export FOX_BUILD_TYPE="Unofficial"
-          source build/envsetup.sh
-          lunch omni_${{ inputs.DEVICE_NAME }}-eng
-          mka recoveryimage -j$(nproc --all)
-
-      - name: Release Build
-        uses: ncipollo/release-action@v1.12.0
-        with:
-          artifacts: workspace/out/target/product/${{ inputs.DEVICE_NAME }}/OrangeFox-*.zip,workspace/out/target/product/${{ inputs.DEVICE_NAME }}/recovery.img
-          name: OrangeFox Recovery for ${{ inputs.DEVICE_NAME }}
-          tag: OFOX-${{ github.run_id }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          body: |
-            ### OrangeFox Recovery Unofficial Build
-            - **Device:** Oppo A31 (CPH2015)
-            - **Branch:** fox_9.0 (Android 9)
-            - **Maintainer:** Ansh_m14x
+    - name: Build PitchBlack Recovery
+      uses: mlm-games/pitchblack-pbrp-builder-action@main
+      id: build
+      with:
+        MANIFEST_BRANCH: ${{ inputs.MANIFEST_BRANCH }}
+        DEVICE_TREE: ${{ inputs.DEVICE_TREE }}
+        DEVICE_TREE_BRANCH: ${{ inputs.DEVICE_TREE_BRANCH }}
+        BUILD_TARGET: ${{ inputs.BUILD_TARGET }}
+  
+    - name: Upload to Release
+      if: success()
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          ${{ env.OUTPUT_DIR }}/*.img
+          ${{ env.OUTPUT_DIR }}/*.zip
+        name: PBRP for Oppo A31 - ${{ env.BUILD_DATE }}
+        tag_name: PBRP-${{ github.run_id }}
+        body: |
+          ## PitchBlack Recovery Unofficial
+          - **Device:** Oppo A31 (OP4C7D)
+          - **Branch:** ${{ inputs.MANIFEST_BRANCH }}
+          - **Maintainer:** Ansh_m14x
+          
+          Build completed successfully!
+        prerelease: false
+        draft: false
