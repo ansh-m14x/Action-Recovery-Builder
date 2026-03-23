@@ -1,4 +1,4 @@
-name: LineageOS Recovery Build - Ubuntu 22.04
+name: LineageOS Recovery Build - Final
 
 on:
   workflow_dispatch:
@@ -40,7 +40,7 @@ jobs:
         sudo apt-get -y install libncurses5 python2 python3 git ccache automake \
         flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib \
         libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools \
-        pngcrush xz-utils schedtool dpkg-dev liblz4-tool make optipng maven \
+        pngcrush xz-utils sledtool dpkg-dev liblz4-tool make optipng maven \
         libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl \
         libxml-simple-perl bc libc6-dev-i386 lib32ncurses5-dev libx11-dev \
         lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler libtinfo5
@@ -65,10 +65,10 @@ jobs:
         git config --global user.name "Ansh_m14x"
         git config --global user.email "ansh@example.com"
         
-        # Branch name fixed to: lineage-16.0
+        # Branch for Android 9 base
         repo init --depth=1 -u https://github.com/LineageOS/android.git -b lineage-16.0
         
-        # Repo sync with force-sync to avoid local manifest conflicts
+        # Direct sync
         repo sync -c -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
 
     - name: Clone Device Tree
@@ -81,8 +81,11 @@ jobs:
         export ALLOW_MISSING_DEPENDENCIES=true
         export LC_ALL=C
         source build/envsetup.sh
-        # Lunching for Oppo A31 (CPH2015)
-        lunch lineage_${{ inputs.DEVICE_NAME }}-eng || lunch omni_${{ inputs.DEVICE_NAME }}-eng
+        
+        # Building specifically for the new lineage product name
+        lunch lineage_${{ inputs.DEVICE_NAME }}-eng
+        
+        # Build command for recovery image
         make recoveryimage -j$(nproc --all)
 
     - name: Release Build
@@ -90,11 +93,11 @@ jobs:
       with:
         artifacts: workspace/out/target/product/${{ inputs.DEVICE_NAME }}/recovery.img
         name: LineageOS Recovery for ${{ inputs.DEVICE_NAME }}
-        tag: LOS-${{ github.run_id }}
+        tag: LOS-FINAL-${{ github.run_id }}
         token: ${{ secrets.GITHUB_TOKEN }}
         body: |
-          ### LineageOS Recovery Build
-          - **Maintainer:** Ansh_m14x
-          - **Branch:** lineage-16.0 (Verified)
+          ### LineageOS Recovery Final Build
           - **Device:** Oppo A31 (CPH2015)
-          - **Brightness Fix:** 4095 Max / 1024 Default
+          - **Build Type:** Eng/Debug
+          - **Status:** Successful Lineage Config Migration
+          - **Brightness Fix:** Verified 4095/1024
