@@ -1,54 +1,98 @@
-name: OrangeFox Recovery Builder (fox_9.0)
+name: OrangeFox Recovery Build - Oppo A31
 
 on:
   workflow_dispatch:
+    inputs:
+      DEVICE_TREE_URL:
+        description: 'Device Tree URL'
+        required: true
+        default: 'https://github.com/Ansh-m14x/android-recovery-OP4C7D'
+      DEVICE_TREE_BRANCH:
+        description: 'Device Tree Branch'
+        required: true
+        default: 'pbrp'
+      DEVICE_PATH:
+        description: 'Sync Path'
+        required: true
+        default: 'device/oppo/OP4C7D'
+      DEVICE_NAME:
+        description: 'Device Name'
+        required: true
+        default: 'OP4C7D'
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     steps:
-    - name: Cleanup Space
-      uses: rokibhasansagar/slimhub_actions@main
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Install Build Tools
-      run: |
-        sudo apt update
-        sudo apt install -y bc build-essential zip curl libncurses5-dev libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig python3 python2
+      - name: Cleanup Space
+        run: |
+          sudo rm -rf /usr/share/dotnet /etc/mysql /usr/local/lib/android /opt/ghc
+          sudo apt clean
 
-    - name: Setup Repo
-      run: |
-        mkdir ~/bin
-        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
-        chmod a+x ~/bin/repo
-        export PATH=~/bin:$PATH
+      - name: Install Build Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install libncurses5 python2 python3 git ccache automake \
+          flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib \
+          libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools \
+          pngcrush xz-utils schedtool dpkg-dev liblz4-tool make optipng maven \
+          libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl \
+          libxml-simple-perl bc libc6-dev-i386 lib32ncurses5-dev libx11-dev \
+          lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler libtinfo5
+          sudo ln -sf /usr/bin/python2 /usr/bin/python
 
-    - name: Sync OrangeFox Source
-      run: |
-        mkdir ~/orangefox
-        cd ~/orangefox
-        export PATH=~/bin:$PATH
-        repo init --depth=1 -u https://gitlab.com/OrangeFox/Manifest.git -b fox_9.0
-        repo sync -j$(nproc --all) --force-sync
+      - name: Install OpenJDK 8
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 8
 
-    - name: Clone Your Device Tree
-      run: |
-        cd ~/orangefox
-        # Pura path ensure kar rahe hain: device/manufacturer/device_code
-        git clone https://github.com/Ansh-m14x/android-recovery-OP4C7D -b pbrp device/oppo/OP4C7D
+      - name: Install Repo Tool
+        run: |
+          mkdir -p ~/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+          sudo ln -sf ~/bin/repo /usr/bin/repo
 
-    - name: Build OrangeFox
-      run: |
-        cd ~/orangefox
-        export PATH=~/bin:$PATH
-        source build/envsetup.sh
-        export ALLOW_MISSING_DEPENDENCIES=true
-        export FOX_VERSION="R11.1"
-        export FOX_BUILD_TYPE="Unofficial"
-        lunch omni_OP4C7D-eng
-        mka recoveryimage -j$(nproc --all)
+      - name: Initialize & Sync OrangeFox Source
+        run: |
+          mkdir workspace && cd workspace
+          git config --global user.name "Ansh_m14x"
+          git config --global user.email "ansh@example.com"
+          # Using OrangeFox Manifest for proper recovery support
+          repo init --depth=1 -u https://gitlab.com/OrangeFox/Manifest.git -b fox_9.0
+          repo sync -c -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
 
-    - name: Upload Recovery Image
-      uses: actions/upload-artifact@v4
-      with:
-        name: OrangeFox-OppoA31
-        path: ~/orangefox/out/target/product/OP4C7D/recovery.img
+      - name: Clone Device Tree
+        run: |
+          git clone ${{ inputs.DEVICE_TREE_URL }} -b ${{ inputs.DEVICE_TREE_BRANCH }} workspace/${{ inputs.DEVICE_PATH }}
+
+      - name: Build OrangeFox
+        run: |
+          cd workspace
+          export ALLOW_MISSING_DEPENDENCIES=true
+          export LC_ALL=C
+          # OrangeFox specific environment variables
+          export FOX_VERSION="R11.1"
+          export FOX_BUILD_TYPE="Unofficial"
+          source build/envsetup.sh
+          lunch omni_${{ inputs.DEVICE_NAME }}-eng
+          mka recoveryimage -j$(nproc --all)
+
+      - name: Release Build
+        uses: ncipollo/release-action@v1.12.0
+        with:
+          artifacts: workspace/out/target/product/${{ inputs.DEVICE_NAME }}/OrangeFox-*.zip,workspace/out/target/product/${{ inputs.DEVICE_NAME }}/recovery.img
+          name: OrangeFox Recovery for ${{ inputs.DEVICE_NAME }}
+          tag: OFOX-${{ github.run_id }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          body: |
+            ### OrangeFox Recovery Unofficial Build
+            - **Device:** Oppo A31 (CPH2015)
+            - **Branch:** fox_9.0 (Android 9)
+            - **Maintainer:** Ansh_m14x
