@@ -1,24 +1,24 @@
-name: PBRP Build - Ubuntu 22.04 (CPH2015)
+name: LineageOS Recovery Build - Ubuntu 22.04
 
 on:
   workflow_dispatch:
     inputs:
       DEVICE_TREE_URL:
-        description: Device Tree URL
+        description: 'Device Tree URL'
         required: true
-        default: https://github.com/Ansh-m14x/android_device_oppo_CPH2015
+        default: 'https://github.com/Ansh-m14x/android_device_oppo_CPH2015'
       DEVICE_TREE_BRANCH:
-        description: Device Tree Branch
+        description: 'Device Tree Branch'
         required: true
-        default: ofox
+        default: 'ofox'
       DEVICE_PATH:
-        description: Sync Path
+        description: 'Sync Path'
         required: true
-        default: device/oppo/OP4C7D
+        default: 'device/oppo/OP4C7D'
       DEVICE_NAME:
-        description: Device Name
+        description: 'Device Name'
         required: true
-        default: OP4C7D
+        default: 'OP4C7D'
 
 jobs:
   build:
@@ -37,14 +37,13 @@ jobs:
     - name: Install Build Packages
       run: |
         sudo apt-get update
-        sudo apt-get -y install libncurses5 python2 python3 \
-        git ccache automake flex lzop bison gperf build-essential zip curl \
-        zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 \
-        libghc-bzlib-dev squashfs-tools pngcrush xz-utils schedtool dpkg-dev liblz4-tool \
-        make optipng maven libssl-dev pwgen libswitch-perl policycoreutils \
-        minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 \
-        lib32ncurses5-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip \
-        device-tree-compiler libtinfo5
+        sudo apt-get -y install libncurses5 python2 python3 git ccache automake \
+        flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib \
+        libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools \
+        pngcrush xz-utils schedtool dpkg-dev liblz4-tool make optipng maven \
+        libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl \
+        libxml-simple-perl bc libc6-dev-i386 lib32ncurses5-dev libx11-dev \
+        lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler libtinfo5
         sudo ln -sf /usr/bin/python2 /usr/bin/python
 
     - name: Install OpenJDK 8
@@ -60,50 +59,39 @@ jobs:
         chmod a+x ~/bin/repo
         sudo ln -sf ~/bin/repo /usr/bin/repo
       
-    - name: Initialize & Sync PBRP (Force Fix)
+    - name: Initialize & Sync LineageOS 16.0
       run: |
         mkdir workspace && cd workspace
         git config --global user.name "Ansh_m14x"
         git config --global user.email "ansh@example.com"
-        
-        # Exact branch: android-9.0
-        repo init --depth=1 -u https://github.com/PitchBlackRecoveryProject/manifest_pb.git -b android-9.0
-        
-        # --- CRITICAL MANIFEST PATCH ---
-        # Broken refs ko fix karne ke liye manifest ko force edit
-        if [ -d .repo/manifests ]; then
-          cd .repo/manifests
-          find . -name "*.xml" -exec sed -i 's/refs\/heads\/android-9.0/android-9.0/g' {} +
-          find . -name "*.xml" -exec sed -i 's/refs\/heads\/Android-9.0/android-9.0/g' {} +
-          cd ../..
-        fi
-        
+        # Official LineageOS 16.0 Manifest
+        repo init --depth=1 -u https://github.com/LineageOS/android.git -b lineage-16.0
         repo sync -c -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
 
     - name: Clone Device Tree
       run: |
         git clone ${{ inputs.DEVICE_TREE_URL }} -b ${{ inputs.DEVICE_TREE_BRANCH }} workspace/${{ inputs.DEVICE_PATH }}
 
-    - name: Build PBRP
+    - name: Build Lineage Recovery
       run: |
         cd workspace
         export ALLOW_MISSING_DEPENDENCIES=true
         export LC_ALL=C
         source build/envsetup.sh
-        # Lunching with omni prefix (standard for PBRP 9.0 build)
-        lunch omni_${{ inputs.DEVICE_NAME }}-eng || lunch pbrp_${{ inputs.DEVICE_NAME }}-eng
-        make pbrp -j$(nproc --all) || make recoveryimage -j$(nproc --all)
+        # Trying Lineage lunch first, fallback to omni
+        lunch lineage_${{ inputs.DEVICE_NAME }}-eng || lunch omni_${{ inputs.DEVICE_NAME }}-eng
+        make recoveryimage -j$(nproc --all)
 
     - name: Release Build
       uses: ncipollo/release-action@v1.12.0
       with:
-        artifacts: workspace/out/target/product/${{ inputs.DEVICE_NAME }}/PBRP-*.zip,workspace/out/target/product/${{ inputs.DEVICE_NAME }}/recovery.img
-        name: PBRP for ${{ inputs.DEVICE_NAME }} - ${{ github.run_id }}
-        tag: PBRP-${{ github.run_id }}
+        artifacts: workspace/out/target/product/${{ inputs.DEVICE_NAME }}/recovery.img
+        name: LineageOS Recovery for ${{ inputs.DEVICE_NAME }} - ${{ github.run_id }}
+        tag: LOS-${{ inputs.DEVICE_NAME }}-${{ github.run_id }}
         token: ${{ secrets.GITHUB_TOKEN }}
         body: |
-          ### PitchBlack Recovery Project
-          - **Device:** Oppo A31 (CPH2015)
+          ### LineageOS Recovery Build
           - **Maintainer:** Ansh_m14x
-          - **Brightness Fix:** Max 4095 / Default 1024
-          - **Build Env:** Ubuntu 22.04
+          - **Device:** Oppo A31 (CPH2015)
+          - **Base:** LineageOS 16.0 (Android 9)
+          - **Brightness Fix:** Verified 4095/1024
