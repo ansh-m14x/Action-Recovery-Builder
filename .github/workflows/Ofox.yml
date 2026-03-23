@@ -1,4 +1,4 @@
-name: LineageOS Recovery Build - Final
+name: LineageOS Recovery Build - Final Fixed
 
 on:
   workflow_dispatch:
@@ -34,13 +34,13 @@ jobs:
         sudo rm -rf /usr/share/dotnet /etc/mysql /usr/local/lib/android /opt/ghc
         sudo apt clean
 
-    - name: Install Build Packages
+    - name: Install Build Packages (Fixed schedtool)
       run: |
         sudo apt-get update
         sudo apt-get -y install libncurses5 python2 python3 git ccache automake \
         flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib \
         libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools \
-        pngcrush xz-utils sledtool dpkg-dev liblz4-tool make optipng maven \
+        pngcrush xz-utils schedtool dpkg-dev liblz4-tool make optipng maven \
         libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl \
         libxml-simple-perl bc libc6-dev-i386 lib32ncurses5-dev libx11-dev \
         lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler libtinfo5
@@ -65,10 +65,7 @@ jobs:
         git config --global user.name "Ansh_m14x"
         git config --global user.email "ansh@example.com"
         
-        # Branch for Android 9 base
         repo init --depth=1 -u https://github.com/LineageOS/android.git -b lineage-16.0
-        
-        # Direct sync
         repo sync -c -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
 
     - name: Clone Device Tree
@@ -82,10 +79,7 @@ jobs:
         export LC_ALL=C
         source build/envsetup.sh
         
-        # Building specifically for the new lineage product name
         lunch lineage_${{ inputs.DEVICE_NAME }}-eng
-        
-        # Build command for recovery image
         make recoveryimage -j$(nproc --all)
 
     - name: Release Build
@@ -98,6 +92,4 @@ jobs:
         body: |
           ### LineageOS Recovery Final Build
           - **Device:** Oppo A31 (CPH2015)
-          - **Build Type:** Eng/Debug
-          - **Status:** Successful Lineage Config Migration
-          - **Brightness Fix:** Verified 4095/1024
+          - **Maintainer:** Ansh_m14x
