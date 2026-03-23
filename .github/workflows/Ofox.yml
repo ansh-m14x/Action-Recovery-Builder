@@ -1,83 +1,108 @@
-name: PitchBlack Recovery Project Builder
+name: PBRP Build - Ubuntu 22.04 (CPH2015)
 
 on:
   workflow_dispatch:
     inputs:
       MANIFEST_BRANCH:
-        description: 'PBRP Manifest Branch'
-        required: true
-        default: 'android-9.0'
         type: choice
+        description: PBRP Manifest Branch
         options:
-        - android-12.1
-        - android-11.0
-        - android-10.0
         - android-9.0
-      DEVICE_TREE:
-        description: 'Custom Recovery Tree URL'
+        - android-11.0
+        - android-12.1
         required: true
-        default: 'https://github.com/Ansh-m14x/android-recovery-OP4C7D'
+        default: android-9.0
+      DEVICE_TREE_URL:
+        description: Device Tree URL
+        required: true
+        default: https://github.com/Ansh-m14x/android-recovery-OP4C7D
       DEVICE_TREE_BRANCH:
-        description: 'Device Tree Branch'
+        description: Device Tree Branch
         required: true
-        default: 'pbrp'
-      BUILD_TARGET:
-        description: 'Build Target'
+        default: pbrp
+      DEVICE_PATH:
+        description: Sync Path
         required: true
-        default: 'pbrp'
-        type: choice
-        options:
-        - pbrp
-        - recovery
+        default: device/oppo/OP4C7D
+      DEVICE_NAME:
+        description: Device Name
+        required: true
+        default: OP4C7D
 
 jobs:
   build:
-    name: Build PBRP by ${{ github.actor }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
-      
     steps:
-    - name: Initial Setup
-      run: |
-        echo "BUILD_START=$(date +%s)" >> $GITHUB_ENV
-        echo "BUILD_DATE=$(TZ=UTC date +%Y%m%d)" >> $GITHUB_ENV
-        
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Clean-up
-      uses: rokibhasansagar/slimhub_actions@main
+    - name: Cleanup Space
+      run: |
+        sudo rm -rf /usr/share/dotnet /etc/mysql /usr/local/lib/android /opt/ghc
+        sudo apt clean
 
-    - name: Swap Space
-      uses: pierotofy/set-swap-space@master
-      with:
-        swap-size-gb: 24
+    - name: Install Build Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install libncurses5 python2 python3 \
+        git ccache automake flex lzop bison gperf build-essential zip curl \
+        zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 \
+        libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool \
+        make optipng maven libssl-dev pwgen libswitch-perl policycoreutils \
+        minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 \
+        lib32ncurses5-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip \
+        device-tree-compiler libtinfo5
+        
+        sudo ln -sf /usr/bin/python2 /usr/bin/python
 
-    - name: Build PitchBlack Recovery
-      uses: mlm-games/pitchblack-pbrp-builder-action@main
-      id: build
+    - name: Install OpenJDK 8
+      uses: actions/setup-java@v4
       with:
-        MANIFEST_BRANCH: ${{ inputs.MANIFEST_BRANCH }}
-        DEVICE_TREE: ${{ inputs.DEVICE_TREE }}
-        DEVICE_TREE_BRANCH: ${{ inputs.DEVICE_TREE_BRANCH }}
-        BUILD_TARGET: ${{ inputs.BUILD_TARGET }}
-  
-    - name: Upload to Release
-      if: success()
-      uses: softprops/action-gh-release@v2
+        distribution: zulu
+        java-version: 8
+
+    - name: Install Repo Tool
+      run: |
+        mkdir -p ~/bin
+        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+        chmod a+x ~/bin/repo
+        sudo ln -sf ~/bin/repo /usr/bin/repo
+      
+    - name: Initialize & Sync PBRP
+      run: |
+        mkdir workspace && cd workspace
+        git config --global user.name "Ansh_m14x"
+        git config --global user.email "ansh@example.com"
+        # PitchBlack Official Manifest
+        repo init --depth=1 -u https://github.com/PitchBlackRecoveryProject/manifest.git -b ${{ inputs.MANIFEST_BRANCH }}
+        repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
+      
+    - name: Clone Device Tree
+      run: |
+        git clone ${{ inputs.DEVICE_TREE_URL }} -b ${{ inputs.DEVICE_TREE_BRANCH }} workspace/${{ inputs.DEVICE_PATH }}
+
+    - name: Build PBRP
+      run: |
+        cd workspace
+        export ALLOW_MISSING_DEPENDENCIES=true
+        export LC_ALL=C
+        source build/envsetup.sh
+        lunch omni_${{ inputs.DEVICE_NAME }}-eng
+        # PBRP specific build command
+        mka pbrp -j$(nproc --all)
+
+    - name: Release Build
+      uses: ncipollo/release-action@v1.12.0
       with:
-        files: |
-          ${{ env.OUTPUT_DIR }}/*.img
-          ${{ env.OUTPUT_DIR }}/*.zip
-        name: PBRP for Oppo A31 - ${{ env.BUILD_DATE }}
-        tag_name: PBRP-${{ github.run_id }}
+        artifacts: |
+          workspace/out/target/product/${{ inputs.DEVICE_NAME }}/*.img
+          workspace/out/target/product/${{ inputs.DEVICE_NAME }}/PBRP*.zip
+        name: PBRP for ${{ inputs.DEVICE_NAME }} - ${{ github.run_id }}
+        tag: PBRP-${{ inputs.DEVICE_NAME }}-${{ github.run_id }}
+        token: ${{ secrets.GITHUB_TOKEN }}
         body: |
-          ## PitchBlack Recovery Unofficial
-          - **Device:** Oppo A31 (OP4C7D)
-          - **Branch:** ${{ inputs.MANIFEST_BRANCH }}
-          - **Maintainer:** Ansh_m14x
-          
-          Build completed successfully!
-        prerelease: false
-        draft: false
+          Build by Ansh_m14x
+          Device: ${{ inputs.DEVICE_NAME }} (Oppo A31)
+          Recovery: PitchBlack Recovery Project
