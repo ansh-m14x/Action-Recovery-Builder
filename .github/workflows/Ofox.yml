@@ -1,4 +1,4 @@
-name: PBRP Build Fixed - Ubuntu 22.04
+name: PBRP Build - Ubuntu 22.04 (CPH2015)
 
 on:
   workflow_dispatch:
@@ -29,11 +29,22 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Cleanup & Install Packages
+    - name: Cleanup Space
       run: |
         sudo rm -rf /usr/share/dotnet /etc/mysql /usr/local/lib/android /opt/ghc
+        sudo apt clean
+
+    - name: Install Build Packages
+      run: |
         sudo apt-get update
-        sudo apt-get -y install libncurses5 python2 python3 git ccache automake flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools pngcrush xz-utils schedtool dpkg-dev liblz4-tool make optipng maven libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 lib32ncurses5-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler libtinfo5
+        sudo apt-get -y install libncurses5 python2 python3 \
+        git ccache automake flex lzop bison gperf build-essential zip curl \
+        zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 \
+        libghc-bzlib-dev squashfs-tools pngcrush xz-utils schedtool dpkg-dev liblz4-tool \
+        make optipng maven libssl-dev pwgen libswitch-perl policycoreutils \
+        minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 \
+        lib32ncurses5-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip \
+        device-tree-compiler libtinfo5
         sudo ln -sf /usr/bin/python2 /usr/bin/python
 
     - name: Install OpenJDK 8
@@ -55,20 +66,19 @@ jobs:
         git config --global user.name "Ansh_m14x"
         git config --global user.email "ansh@example.com"
         
-        # Exact branch: android-9.0 (all small)
+        # Exact branch: android-9.0
         repo init --depth=1 -u https://github.com/PitchBlackRecoveryProject/manifest_pb.git -b android-9.0
         
         # --- CRITICAL MANIFEST PATCH ---
-        # Broken refs ko fix karne ke liye manifest ko manual clean kar rahe hain
+        # Broken refs ko fix karne ke liye manifest ko force edit
         if [ -d .repo/manifests ]; then
           cd .repo/manifests
-          sed -i 's/refs\/heads\/android-9.0/android-9.0/g' default.xml
-          sed -i 's/refs\/heads\/Android-9.0/android-9.0/g' default.xml
+          find . -name "*.xml" -exec sed -i 's/refs\/heads\/android-9.0/android-9.0/g' {} +
+          find . -name "*.xml" -exec sed -i 's/refs\/heads\/Android-9.0/android-9.0/g' {} +
           cd ../..
         fi
         
-        # j4 sync for better stability
-        repo sync -c -j4 --force-sync --no-tags --no-clone-bundle
+        repo sync -c -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
 
     - name: Clone Device Tree
       run: |
@@ -80,8 +90,8 @@ jobs:
         export ALLOW_MISSING_DEPENDENCIES=true
         export LC_ALL=C
         source build/envsetup.sh
-        # PBRP specific lunch check
-        lunch pbrp_${{ inputs.DEVICE_NAME }}-eng || lunch omni_${{ inputs.DEVICE_NAME }}-eng
+        # Lunching with omni prefix (standard for PBRP 9.0 build)
+        lunch omni_${{ inputs.DEVICE_NAME }}-eng || lunch pbrp_${{ inputs.DEVICE_NAME }}-eng
         make pbrp -j$(nproc --all) || make recoveryimage -j$(nproc --all)
 
     - name: Release Build
@@ -92,6 +102,8 @@ jobs:
         tag: PBRP-${{ github.run_id }}
         token: ${{ secrets.GITHUB_TOKEN }}
         body: |
-          Build by Ansh_m14x
-          Manifest: PBRP android-9.0 (Verified)
-          Brightness: 4095/1024
+          ### PitchBlack Recovery Project
+          - **Device:** Oppo A31 (CPH2015)
+          - **Maintainer:** Ansh_m14x
+          - **Brightness Fix:** Max 4095 / Default 1024
+          - **Build Env:** Ubuntu 22.04
