@@ -15,7 +15,7 @@ on:
         required: true
         default: https://github.com/Ansh-m14x/android_device_oppo_CPH2015
       DEVICE_TREE_BRANCH:
-        description: Device Tree Branch (Use 'ofox' branch)
+        description: Device Tree Branch
         required: true
         default: ofox
       DEVICE_PATH:
@@ -33,7 +33,7 @@ jobs:
     permissions:
       contents: write
     steps:
-    - name: Checkout
+    - name: Checkout Workflow
       uses: actions/checkout@v4
 
     - name: Cleanup Space
@@ -75,14 +75,13 @@ jobs:
         repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni.git -b twrp-9.0
         repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
 
-    - name: Swap to OrangeFox Source
+    - name: Swap to OrangeFox Source (fox_9.0)
       run: |
         cd workspace
-        # Remove standard TWRP recovery source
+        # Standard TWRP recovery ko remove karna
         rm -rf bootable/recovery
-        # Clone OrangeFox Recovery source
+        # OrangeFox Recovery aur Vendor ko fox_9.0 branch se download karna
         git clone https://gitlab.com/OrangeFox/bootable/Recovery.git -b fox_9.0 bootable/recovery
-        # Clone OrangeFox Vendor (essential for themes/scripts)
         git clone https://gitlab.com/OrangeFox/vendor/recovery.git -b fox_9.0 vendor/recovery
       
     - name: Clone Device Tree
@@ -95,11 +94,11 @@ jobs:
         export ALLOW_MISSING_DEPENDENCIES=true
         export LC_ALL=C
         source build/envsetup.sh
-        # If you didn't rename your lunch combo, it stays omni_
+        # OrangeFox uses its own lunch but we keep yours to avoid errors
         lunch omni_${{ inputs.DEVICE_NAME }}-eng
         make recoveryimage -j$(nproc --all)
 
-    - name: Release OrangeFox
+    - name: Release OrangeFox Build
       uses: ncipollo/release-action@v1.12.0
       with:
         artifacts: workspace/out/target/product/${{ inputs.DEVICE_NAME }}/OrangeFox-*.img,workspace/out/target/product/${{ inputs.DEVICE_NAME }}/OrangeFox-*.zip
@@ -107,7 +106,8 @@ jobs:
         tag: OFOX-${{ inputs.DEVICE_NAME }}-${{ github.run_id }}
         token: ${{ secrets.GITHUB_TOKEN }}
         body: |
-          OrangeFox Recovery R11.1 Build
-          Maintainer: Ansh_m14x
-          Device: Oppo A31 (CPH2015)
-          Base: Omni 9.0 Manifest
+          ### OrangeFox Recovery R11.1
+          - Maintainer: **Ansh_m14x**
+          - Device: **Oppo A31 (CPH2015)**
+          - Build Date: ${{ github.event.head_commit.timestamp }}
+          - Status: Unofficial Build
