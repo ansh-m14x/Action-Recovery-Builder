@@ -64,8 +64,11 @@ jobs:
         mkdir workspace && cd workspace
         git config --global user.name "Ansh_m14x"
         git config --global user.email "ansh@example.com"
-        # Official LineageOS 16.0 Manifest
+        
+        # Branch name fixed to: lineage-16.0
         repo init --depth=1 -u https://github.com/LineageOS/android.git -b lineage-16.0
+        
+        # Repo sync with force-sync to avoid local manifest conflicts
         repo sync -c -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
 
     - name: Clone Device Tree
@@ -78,7 +81,7 @@ jobs:
         export ALLOW_MISSING_DEPENDENCIES=true
         export LC_ALL=C
         source build/envsetup.sh
-        # Trying Lineage lunch first, fallback to omni
+        # Lunching for Oppo A31 (CPH2015)
         lunch lineage_${{ inputs.DEVICE_NAME }}-eng || lunch omni_${{ inputs.DEVICE_NAME }}-eng
         make recoveryimage -j$(nproc --all)
 
@@ -86,12 +89,12 @@ jobs:
       uses: ncipollo/release-action@v1.12.0
       with:
         artifacts: workspace/out/target/product/${{ inputs.DEVICE_NAME }}/recovery.img
-        name: LineageOS Recovery for ${{ inputs.DEVICE_NAME }} - ${{ github.run_id }}
-        tag: LOS-${{ inputs.DEVICE_NAME }}-${{ github.run_id }}
+        name: LineageOS Recovery for ${{ inputs.DEVICE_NAME }}
+        tag: LOS-${{ github.run_id }}
         token: ${{ secrets.GITHUB_TOKEN }}
         body: |
           ### LineageOS Recovery Build
           - **Maintainer:** Ansh_m14x
+          - **Branch:** lineage-16.0 (Verified)
           - **Device:** Oppo A31 (CPH2015)
-          - **Base:** LineageOS 16.0 (Android 9)
-          - **Brightness Fix:** Verified 4095/1024
+          - **Brightness Fix:** 4095 Max / 1024 Default
