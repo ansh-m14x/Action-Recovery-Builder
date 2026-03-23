@@ -78,11 +78,9 @@ jobs:
     - name: Swap to OrangeFox Source
       run: |
         cd workspace
-        # Remove TWRP source
         rm -rf bootable/recovery
-        # Clone OrangeFox Recovery UI (fox_9.0 usually works here)
+        # Alag branches for UI and Vendor
         git clone https://gitlab.com/OrangeFox/bootable/Recovery.git -b fox_9.0 bootable/recovery
-        # Clone OrangeFox Vendor (Using R9.0 branch as requested)
         git clone https://gitlab.com/OrangeFox/vendor/recovery.git -b R9.0 vendor/recovery
       
     - name: Clone Device Tree
@@ -109,4 +107,3 @@ jobs:
           ### OrangeFox Recovery R11.1
           - Maintainer: **Ansh_m14x**
           - Device: **Oppo A31 (CPH2015)**
-          - Base: Omni 9.0 Manifest
