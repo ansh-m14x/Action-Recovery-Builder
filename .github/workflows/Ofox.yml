@@ -1,4 +1,4 @@
-name: PBRP Build - Ubuntu 22.04
+name: PBRP Build Fixed - Ubuntu 22.04
 
 on:
   workflow_dispatch:
@@ -49,21 +49,25 @@ jobs:
         chmod a+x ~/bin/repo
         sudo ln -sf ~/bin/repo /usr/bin/repo
       
-    - name: Initialize & Sync PBRP (With Manifest Fix)
+    - name: Initialize & Sync PBRP (Force Fix)
       run: |
         mkdir workspace && cd workspace
         git config --global user.name "Ansh_m14x"
         git config --global user.email "ansh@example.com"
         
-        # Initializing with the branch shown in your screenshot
-        repo init --depth=1 -u https://github.com/PitchBlackRecoveryProject/manifest_pb.git -b Android-9.0
+        # Exact branch: android-9.0 (all small)
+        repo init --depth=1 -u https://github.com/PitchBlackRecoveryProject/manifest_pb.git -b android-9.0
         
-        # Fix for the 'Remote ref not found' sync error
-        cd .repo/manifests
-        sed -i 's/refs\/heads\/Android-9.0/Android-9.0/g' default.xml
-        sed -i 's/refs\/heads\/android-9.0/Android-9.0/g' default.xml
-        cd ../..
+        # --- CRITICAL MANIFEST PATCH ---
+        # Broken refs ko fix karne ke liye manifest ko manual clean kar rahe hain
+        if [ -d .repo/manifests ]; then
+          cd .repo/manifests
+          sed -i 's/refs\/heads\/android-9.0/android-9.0/g' default.xml
+          sed -i 's/refs\/heads\/Android-9.0/android-9.0/g' default.xml
+          cd ../..
+        fi
         
+        # j4 sync for better stability
         repo sync -c -j4 --force-sync --no-tags --no-clone-bundle
 
     - name: Clone Device Tree
@@ -76,6 +80,7 @@ jobs:
         export ALLOW_MISSING_DEPENDENCIES=true
         export LC_ALL=C
         source build/envsetup.sh
+        # PBRP specific lunch check
         lunch pbrp_${{ inputs.DEVICE_NAME }}-eng || lunch omni_${{ inputs.DEVICE_NAME }}-eng
         make pbrp -j$(nproc --all) || make recoveryimage -j$(nproc --all)
 
@@ -83,12 +88,10 @@ jobs:
       uses: ncipollo/release-action@v1.12.0
       with:
         artifacts: workspace/out/target/product/${{ inputs.DEVICE_NAME }}/PBRP-*.zip,workspace/out/target/product/${{ inputs.DEVICE_NAME }}/recovery.img
-        name: PBRP for ${{ inputs.DEVICE_NAME }}
+        name: PBRP for ${{ inputs.DEVICE_NAME }} - ${{ github.run_id }}
         tag: PBRP-${{ github.run_id }}
         token: ${{ secrets.GITHUB_TOKEN }}
         body: |
-          ### PitchBlack Recovery Project
-          - **Maintainer:** Ansh_m14x
-          - **Device:** Oppo A31 (CPH2015)
-          - **Brightness Fix:** 4095 Max / 1024 Default
-          - **Status:** Unofficial
+          Build by Ansh_m14x
+          Manifest: PBRP android-9.0 (Verified)
+          Brightness: 4095/1024
