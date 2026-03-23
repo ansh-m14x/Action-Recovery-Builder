@@ -75,14 +75,15 @@ jobs:
         repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni.git -b twrp-9.0
         repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
 
-    - name: Swap to OrangeFox Source (fox_9.0)
+    - name: Swap to OrangeFox Source
       run: |
         cd workspace
-        # Standard TWRP recovery ko remove karna
+        # Remove TWRP source
         rm -rf bootable/recovery
-        # OrangeFox Recovery aur Vendor ko fox_9.0 branch se download karna
+        # Clone OrangeFox Recovery UI (fox_9.0 usually works here)
         git clone https://gitlab.com/OrangeFox/bootable/Recovery.git -b fox_9.0 bootable/recovery
-        git clone https://gitlab.com/OrangeFox/vendor/recovery.git -b fox_9.0 vendor/recovery
+        # Clone OrangeFox Vendor (Using R9.0 branch as requested)
+        git clone https://gitlab.com/OrangeFox/vendor/recovery.git -b R9.0 vendor/recovery
       
     - name: Clone Device Tree
       run: |
@@ -94,7 +95,6 @@ jobs:
         export ALLOW_MISSING_DEPENDENCIES=true
         export LC_ALL=C
         source build/envsetup.sh
-        # OrangeFox uses its own lunch but we keep yours to avoid errors
         lunch omni_${{ inputs.DEVICE_NAME }}-eng
         make recoveryimage -j$(nproc --all)
 
@@ -109,5 +109,4 @@ jobs:
           ### OrangeFox Recovery R11.1
           - Maintainer: **Ansh_m14x**
           - Device: **Oppo A31 (CPH2015)**
-          - Build Date: ${{ github.event.head_commit.timestamp }}
-          - Status: Unofficial Build
+          - Base: Omni 9.0 Manifest
