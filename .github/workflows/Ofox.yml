@@ -1,33 +1,28 @@
-name: PBRP Build - Ubuntu 22.04 (CPH2015)
+name: Recovery Build - PBRP 9.0 (CPH2015)
 
 on:
   workflow_dispatch:
     inputs:
       MANIFEST_BRANCH:
-        type: choice
-        description: PBRP Manifest Branch
-        options:
-        - android-9.0
-        - android-11.0
-        - android-12.1
+        description: 'PBRP Manifest Branch'
         required: true
-        default: android-9.0
+        default: 'android-9.0'
       DEVICE_TREE_URL:
-        description: Device Tree URL
+        description: 'Device Tree URL'
         required: true
-        default: https://github.com/Ansh-m14x/android-recovery-OP4C7D
+        default: 'https://github.com/Ansh-m14x/android_device_oppo_CPH2015'
       DEVICE_TREE_BRANCH:
-        description: Device Tree Branch
+        description: 'Device Tree Branch'
         required: true
-        default: pbrp
+        default: 'main'
       DEVICE_PATH:
-        description: Sync Path
+        description: 'Sync Path'
         required: true
-        default: device/oppo/OP4C7D
+        default: 'device/oppo/OP4C7D'
       DEVICE_NAME:
-        description: Device Name
+        description: 'Device Name'
         required: true
-        default: OP4C7D
+        default: 'OP4C7D'
 
 jobs:
   build:
@@ -55,6 +50,7 @@ jobs:
         lib32ncurses5-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip \
         device-tree-compiler libtinfo5
         
+        # Force Python 2 for legacy scripts
         sudo ln -sf /usr/bin/python2 /usr/bin/python
 
     - name: Install OpenJDK 8
@@ -75,8 +71,9 @@ jobs:
         mkdir workspace && cd workspace
         git config --global user.name "Ansh_m14x"
         git config --global user.email "ansh@example.com"
-        # PitchBlack Official Manifest
-        repo init --depth=1 -u https://github.com/PitchBlackRecoveryProject/manifest.git -b ${{ inputs.MANIFEST_BRANCH }}
+        # Initializing PBRP Manifest
+        repo init --depth=1 -u https://github.com/PitchBlackRecoveryProject/manifest_pb.git -b ${{ inputs.MANIFEST_BRANCH }}
+        # Syncing... (Reduced jobs to -j4 to avoid OOM errors)
         repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
       
     - name: Clone Device Tree
@@ -90,19 +87,17 @@ jobs:
         export LC_ALL=C
         source build/envsetup.sh
         lunch omni_${{ inputs.DEVICE_NAME }}-eng
-        # PBRP specific build command
-        mka pbrp -j$(nproc --all)
+        # Direct recovery image build
+        make recoveryimage -j$(nproc --all)
 
     - name: Release Build
       uses: ncipollo/release-action@v1.12.0
       with:
-        artifacts: |
-          workspace/out/target/product/${{ inputs.DEVICE_NAME }}/*.img
-          workspace/out/target/product/${{ inputs.DEVICE_NAME }}/PBRP*.zip
+        artifacts: workspace/out/target/product/${{ inputs.DEVICE_NAME }}/recovery.img
         name: PBRP for ${{ inputs.DEVICE_NAME }} - ${{ github.run_id }}
-        tag: PBRP-${{ inputs.DEVICE_NAME }}-${{ github.run_id }}
+        tag: ${{ inputs.DEVICE_NAME }}-${{ github.run_id }}
         token: ${{ secrets.GITHUB_TOKEN }}
         body: |
           Build by Ansh_m14x
           Device: ${{ inputs.DEVICE_NAME }} (Oppo A31)
-          Recovery: PitchBlack Recovery Project
+          Target: Recovery Image (Compiled from PBRP Source)
