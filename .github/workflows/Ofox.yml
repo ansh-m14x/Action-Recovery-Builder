@@ -1,10 +1,10 @@
-name: Recovery Build - PBRP 9.0 (CPH2015)
+name: Recovery Build - LineageOS 16.0 (CPH2015)
 
 on:
   workflow_dispatch:
     inputs:
       MANIFEST_BRANCH:
-        description: 'TWRP Manifest Branch'
+        description: 'TWRP/Omni Manifest Branch'
         required: true
         default: '9.0'
       DEVICE_TREE_URL:
@@ -50,7 +50,7 @@ jobs:
         lib32ncurses5-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip \
         device-tree-compiler libtinfo5
         
-        # Force Python 2 for Android 9.0 build scripts
+        # Force Python 2 for 9.0 legacy scripts
         sudo ln -sf /usr/bin/python2 /usr/bin/python
 
     - name: Install OpenJDK 8
@@ -66,53 +66,42 @@ jobs:
         chmod a+x ~/bin/repo
         sudo ln -sf ~/bin/repo /usr/bin/repo
       
-    - name: Initialize & Sync (Minimal + PBRP Fix)
+    - name: Initialize & Sync (LOS 16.0 Base)
       run: |
         mkdir workspace && cd workspace
         git config --global user.name "Ansh_m14x"
         git config --global user.email "ansh@example.com"
         
-        # Step 1: Initialize Minimal TWRP 9.0 (Stable Base)
+        # Using Minimal Manifest for stability
         repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni.git -b twrp-9.0
         
-        # Step 2: Sync Core Files
+        # Syncing...
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
-        
-        # Step 3: Clone PBRP Specific Folders
-        git clone https://github.com/PitchBlackRecoveryProject/vendor_pb.git -b pb vendor/pb
-        git clone https://github.com/PitchBlackRecoveryProject/vendor_utils.git -b pb vendor/utils
-        git clone https://github.com/PitchBlackRecoveryProject/android_bootable_recovery.git -b android-9.0 bootable/recovery-pbrp
-        
-        # Step 4: FIX Duplicate Soong Definition (Conflict Solve)
-        rm -rf vendor/omni/build/soong
-        
-        # Step 5: Replace TWRP recovery with PBRP recovery
-        rm -rf bootable/recovery
-        mv bootable/recovery-pbrp bootable/recovery
       
     - name: Clone Device Tree
       run: |
         cd workspace
         git clone ${{ inputs.DEVICE_TREE_URL }} -b ${{ inputs.DEVICE_TREE_BRANCH }} ${{ inputs.DEVICE_PATH }}
 
-    - name: Build PBRP
+    - name: Build Lineage Recovery
       run: |
         cd workspace
         export ALLOW_MISSING_DEPENDENCIES=true
         export LC_ALL=C
         source build/envsetup.sh
-        lunch omni_${{ inputs.DEVICE_NAME }}-eng
+        # Note: Lunching with lineage prefix as per your .mk file
+        lunch lineage_${{ inputs.DEVICE_NAME }}-eng
         make recoveryimage -j$(nproc --all)
 
     - name: Release Build
       uses: ncipollo/release-action@v1.12.0
       with:
         artifacts: workspace/out/target/product/${{ inputs.DEVICE_NAME }}/recovery.img
-        name: PBRP-OppoA31-${{ github.run_id }}
+        name: LOS-Recovery-OppoA31-${{ github.run_id }}
         tag: ${{ inputs.DEVICE_NAME }}-${{ github.run_id }}
         token: ${{ secrets.GITHUB_TOKEN }}
         body: |
           Build by Ansh_m14x
           Device: Oppo A31 (CPH2015)
-          Manifest: TWRP 9.0 + PBRP Source
-          Status: Stable Compile
+          Manifest: LineageOS 16.0 / TWRP 9.0 Base
+          DTBO: Included in build
