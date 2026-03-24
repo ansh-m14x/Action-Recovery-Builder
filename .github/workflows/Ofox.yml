@@ -50,7 +50,7 @@ jobs:
         lib32ncurses5-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip \
         device-tree-compiler libtinfo5
         
-        # Force Python 2 for Android 9.0 scripts
+        # Force Python 2 for Android 9.0 build scripts
         sudo ln -sf /usr/bin/python2 /usr/bin/python
 
     - name: Install OpenJDK 8
@@ -72,17 +72,21 @@ jobs:
         git config --global user.name "Ansh_m14x"
         git config --global user.email "ansh@example.com"
         
-        # Step 1: Initialize Minimal TWRP 9.0 (Stable)
+        # Step 1: Initialize Minimal TWRP 9.0 (Stable Base)
         repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni.git -b twrp-9.0
         
         # Step 2: Sync Core Files
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
         
-        # Step 3: Add PBRP Specific Folders
+        # Step 3: Clone PBRP Specific Folders
         git clone https://github.com/PitchBlackRecoveryProject/vendor_pb.git -b pb vendor/pb
+        git clone https://github.com/PitchBlackRecoveryProject/vendor_utils.git -b pb vendor/utils
         git clone https://github.com/PitchBlackRecoveryProject/android_bootable_recovery.git -b android-9.0 bootable/recovery-pbrp
         
-        # Step 4: Replace TWRP recovery with PBRP recovery
+        # Step 4: FIX Duplicate Soong Definition (Conflict Solve)
+        rm -rf vendor/omni/build/soong
+        
+        # Step 5: Replace TWRP recovery with PBRP recovery
         rm -rf bootable/recovery
         mv bootable/recovery-pbrp bootable/recovery
       
@@ -104,10 +108,11 @@ jobs:
       uses: ncipollo/release-action@v1.12.0
       with:
         artifacts: workspace/out/target/product/${{ inputs.DEVICE_NAME }}/recovery.img
-        name: PBRP for ${{ inputs.DEVICE_NAME }} - ${{ github.run_id }}
+        name: PBRP-OppoA31-${{ github.run_id }}
         tag: ${{ inputs.DEVICE_NAME }}-${{ github.run_id }}
         token: ${{ secrets.GITHUB_TOKEN }}
         body: |
           Build by Ansh_m14x
-          Device: ${{ inputs.DEVICE_NAME }} (Oppo A31)
-          Target: Recovery Image (Compiled with PBRP Source)
+          Device: Oppo A31 (CPH2015)
+          Manifest: TWRP 9.0 + PBRP Source
+          Status: Stable Compile
