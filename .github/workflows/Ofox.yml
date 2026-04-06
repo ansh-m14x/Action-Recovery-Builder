@@ -12,39 +12,51 @@ jobs:
     - name: Checkout Workflow
       uses: actions/checkout@v4
 
-    - name: Cleanup Space (Crucial for GitHub Runners)
+    - name: Cleanup Space
       run: |
-        sudo rm -rf /usr/share/dotnet /etc/mysql /usr/local/lib/android /opt/ghc /usr/local/share/boost
+        sudo rm -rf /usr/share/dotnet /etc/mysql /usr/local/lib/android /opt/ghc
         sudo apt clean
-        df -h
 
-    - name: Install Build Packages
+    - name: Install Build Packages (Verified List)
       run: |
-        sudo apt update
-        sudo apt install -y bc bison build-essential curl flex g++-multilib gperf gcc-multilib \
-        git gnupg gflip libxml2 lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev libssl-dev \
-        libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python2
+        sudo apt-get update
+        sudo apt-get -y install libncurses5 python2 python3 \
+        git ccache automake flex lzop bison gperf build-essential zip curl \
+        zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 \
+        libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool \
+        make optipng maven libssl-dev pwgen libswitch-perl policycoreutils \
+        minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 \
+        lib32ncurses5-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip \
+        device-tree-compiler libtinfo5
+        
+        # Point python to python2 for SHRP 9.0 scripts
         sudo ln -sf /usr/bin/python2 /usr/bin/python
+
+    - name: Install OpenJDK 8
+      uses: actions/setup-java@v4
+      with:
+        distribution: zulu
+        java-version: 8
 
     - name: Install Repo Tool
       run: |
-        mkdir ~/bin && curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+        mkdir -p ~/bin
+        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod a+x ~/bin/repo
         sudo ln -sf ~/bin/repo /usr/bin/repo
-
-    - name: Sync SHRP v3_9.0 Source
+      
+    - name: Initialize & Sync SHRP
       run: |
         mkdir workspace && cd workspace
         git config --global user.name "Ansh_m14x"
         git config --global user.email "ansh@example.com"
-        # Syncing only required parts to save space
         repo init --depth=1 -u https://github.com/SHRP/manifest.git -b v3_9.0
-        repo sync -c -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
-
+        repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
+      
     - name: Clone Device Tree
       run: |
-        cd workspace
-        git clone https://github.com/Ansh-m14x/android_device_oppo_CPH2015 -b main device/oppo/OP4C7D
+        # Correct path for Oppo A31/OP4C7D
+        git clone https://github.com/Ansh-m14x/android_device_oppo_CPH2015 -b main workspace/device/oppo/OP4C7D
 
     - name: Build SHRP
       run: |
@@ -53,20 +65,16 @@ jobs:
         export LC_ALL=C
         source build/envsetup.sh
         lunch omni_OP4C7D-eng
-        # Guide ke mutabiq mka recoveryimage use karein
         make recoveryimage -j$(nproc --all)
-
-    - name: Upload Recovery Image
-      uses: actions/upload-artifact@v4
-      with:
-        name: SHRP-Recovery-A31
-        path: workspace/out/target/product/OP4C7D/recovery.img
 
     - name: Release Build
       uses: ncipollo/release-action@v1
       with:
         artifacts: "workspace/out/target/product/OP4C7D/recovery.img"
-        name: SHRP v3.2 for Oppo A31
+        name: SHRP for OP4C7D (A31) - ${{ github.run_id }}
         tag: SHRP-${{ github.run_id }}
         token: ${{ secrets.GITHUB_TOKEN }}
-        body: "Built by Ansh_m14x using SHRP Manifest v3_9.0"
+        body: |
+          SHRP v3.2 Build (Android 9.0)
+          Device: Oppo A31
+          Maintainer: Ansh_m14x
