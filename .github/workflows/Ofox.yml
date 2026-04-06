@@ -9,7 +9,7 @@ on:
         required: true
       DEVICE_TREE_URL:
         description: 'Device Tree URL'
-        default: 'https://github.com/Ansh-m14x/android_device_oppo_CPH2015'
+        default: 'https://github.com/ansh-m14x/android-recovery-OP4C7D'
         required: true
       DEVICE_TREE_BRANCH:
         description: 'Branch'
