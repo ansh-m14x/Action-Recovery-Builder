@@ -1,4 +1,4 @@
-name: SHRP Recovery Build - GitHub Runner
+name: SHRP Recovery Build - Fixed Sync
 
 on:
   workflow_dispatch:
@@ -17,19 +17,15 @@ jobs:
         sudo rm -rf /usr/share/dotnet /etc/mysql /usr/local/lib/android /opt/ghc
         sudo apt clean
 
-    - name: Install Build Packages (Verified List)
+    - name: Install Build Packages
       run: |
         sudo apt-get update
-        sudo apt-get -y install libncurses5 python2 python3 \
-        git ccache automake flex lzop bison gperf build-essential zip curl \
-        zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 \
-        libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool \
-        make optipng maven libssl-dev pwgen libswitch-perl policycoreutils \
-        minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 \
-        lib32ncurses5-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip \
-        device-tree-compiler libtinfo5
-        
-        # Point python to python2 for SHRP 9.0 scripts
+        sudo apt-get -y install libncurses5 python2 python3 git ccache automake flex lzop bison \
+        gperf build-essential zip curl zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev \
+        libbz2-1.0 libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool \
+        make optipng maven libssl-dev pwgen libswitch-perl policycoreutils minicom \
+        libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 lib32ncurses5-dev \
+        libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler libtinfo5
         sudo ln -sf /usr/bin/python2 /usr/bin/python
 
     - name: Install OpenJDK 8
@@ -45,18 +41,24 @@ jobs:
         chmod a+x ~/bin/repo
         sudo ln -sf ~/bin/repo /usr/bin/repo
       
-    - name: Initialize & Sync SHRP
+    - name: Initialize & Sync (Stable Manifest)
       run: |
         mkdir workspace && cd workspace
         git config --global user.name "Ansh_m14x"
         git config --global user.email "ansh@example.com"
-        repo init --depth=1 -u https://github.com/SHRP/manifest.git -b v3_9.0
+        
+        # We use Minimal TWRP 9.0 manifest because SHRP v3_9.0 manifest is broken
+        repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni.git -b twrp-9.0
         repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
-      
-    - name: Clone Device Tree
+
+    - name: Clone SHRP Resources & Device Tree
       run: |
-        # Correct path for Oppo A31/OP4C7D
-        git clone https://github.com/Ansh-m14x/android_device_oppo_CPH2015 -b main workspace/device/oppo/OP4C7D
+        cd workspace
+        # Clone SHRP Recovery Source (This makes it SHRP instead of TWRP)
+        git clone https://github.com/SHRP/shrp_recovery.git -b v3_9.0 bootable/recovery-shrp
+        
+        # Clone your Device Tree
+        git clone https://github.com/Ansh-m14x/android_device_oppo_CPH2015 -b main device/oppo/OP4C7D
 
     - name: Build SHRP
       run: |
@@ -65,16 +67,11 @@ jobs:
         export LC_ALL=C
         source build/envsetup.sh
         lunch omni_OP4C7D-eng
+        # SHRP builds usually use mka recoveryimage but trigger SHRP scripts
         make recoveryimage -j$(nproc --all)
 
-    - name: Release Build
-      uses: ncipollo/release-action@v1
+    - name: Upload Build
+      uses: actions/upload-artifact@v4
       with:
-        artifacts: "workspace/out/target/product/OP4C7D/recovery.img"
-        name: SHRP for OP4C7D (A31) - ${{ github.run_id }}
-        tag: SHRP-${{ github.run_id }}
-        token: ${{ secrets.GITHUB_TOKEN }}
-        body: |
-          SHRP v3.2 Build (Android 9.0)
-          Device: Oppo A31
-          Maintainer: Ansh_m14x
+        name: SHRP-OP4C7D-Recovery
+        path: workspace/out/target/product/OP4C7D/recovery.img
