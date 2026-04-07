@@ -87,32 +87,30 @@ jobs:
       run: |
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
-        
-        # 1. Device Tree Fix (Physical to System-Vendor)
-        V_PATH="${{ github.event.inputs.DEVICE_PATH }}/recovery/root"
-        if [ -d "$V_PATH/vendor" ] && [ ! -L "$V_PATH/vendor" ]; then
-            echo "📦 Fixing physical vendor in Device Tree..."
-            mkdir -p $V_PATH/system/vendor
-            cp -rf $V_PATH/vendor/* $V_PATH/system/vendor/
-            rm -rf $V_PATH/vendor
-        fi
-
-        # 2. Lunch to initialize out directory
         lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng
-        
-        # 3. THE BRUTE FORCE FIX (Force Symlink in OUT directory)
-        echo "🚀 Tricking Ninja: Creating forced symlink in out/ folder..."
-        mkdir -p out/target/product/${{ github.event.inputs.DEVICE_NAME }}/root
-        rm -rf out/target/product/${{ github.event.inputs.DEVICE_NAME }}/root/vendor
-        ln -sf /system/vendor out/target/product/${{ github.event.inputs.DEVICE_NAME }}/root/vendor
-        
-        mkdir -p out/target/product/${{ github.event.inputs.DEVICE_NAME }}/recovery/root
-        rm -rf out/target/product/${{ github.event.inputs.DEVICE_NAME }}/recovery/root/vendor
-        ln -sf /system/vendor out/target/product/${{ github.event.inputs.DEVICE_NAME }}/recovery/root/vendor
 
-        # 4. Final Build
-        make clean
+        # 🚀 BACKGROUND WATCHDOG LOOP
+        (
+          echo "🕵️ Watchdog: Checking for vendor folder conflict every 1s..."
+          while true; do
+            for path in out/target/product/${{ github.event.inputs.DEVICE_NAME }}/root/vendor out/target/product/${{ github.event.inputs.DEVICE_NAME }}/recovery/root/vendor; do
+              if [ -d "$path" ] && [ ! -L "$path" ]; then
+                echo "🔥 Ninja detected! Fixing $path"
+                rm -rf "$path"
+                ln -sf /system/vendor "$path"
+              fi
+            done
+            sleep 1
+          done
+        ) &
+        WATCHDOG_PID=$!
+
+        # 🏗️ Actual Build
+        echo "🏗️ Starting Build (Watchdog PID: $WATCHDOG_PID)..."
         make ${{ github.event.inputs.BUILD_TARGET }}image -j$(nproc --all)
+
+        # Kill the watchdog after build
+        kill $WATCHDOG_PID
       working-directory: workspace
 
     - name: Upload to Release
