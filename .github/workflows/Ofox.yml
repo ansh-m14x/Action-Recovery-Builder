@@ -23,12 +23,6 @@ on:
         description: 'DEVICE_PATH'
         required: true
         default: 'device/oppo/OP4C7D'
-      COMMON_TREE_URL:
-        description: 'COMMON_TREE_URL (Optional)'
-        required: false
-      COMMON_PATH:
-        description: 'COMMON_PATH (Optional)'
-        required: false
       DEVICE_NAME:
         description: 'DEVICE_NAME'
         required: true
@@ -49,37 +43,16 @@ jobs:
     permissions:
       contents: write
     steps:
-    - name: Display Run Parameters
-      run: |
-        echo "::group::User Environment Variables"
-        echo "Manifest URL: ${{ github.event.inputs.MANIFEST_URL }}"
-        echo "Device Path: ${{ github.event.inputs.DEVICE_PATH }}"
-        echo "Device Name: ${{ github.event.inputs.DEVICE_NAME }}"
-        echo "Makefile Name: ${{ github.event.inputs.MAKEFILE_NAME }}"
-        echo "::endgroup::"
-
     - name: Check Out
       uses: actions/checkout@v4
 
     - name: Cleanup
       uses: rokibhasansagar/slimhub_actions@main
 
-    - name: Prepare the environment
+    - name: Prepare environment
       run: |
-        sudo apt update && sudo apt upgrade -y
-        DEBIAN_FRONTEND=noninteractive sudo apt install -yq \
-            linux-modules-extra-$(uname -r) \
-            gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib \
-            libc6-dev lib32ncurses-dev x11proto-core-dev libx11-dev tree lib32z-dev libgl1-mesa-dev libxml2-utils \
-            xsltproc bc ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses-dev libsdl1.2-dev \
-            build-essential libgtk-3-dev libglu1-mesa-dev freeglut3-dev git libxml2 lzop pngcrush schedtool squashfs-tools \
-            imagemagick libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev libncurses6 python3 tar
-
-    - name: Install OpenJDK
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'zulu'
-        java-version: '11'
+        sudo apt update
+        sudo apt install -y gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib libc6-dev lib32ncurses-dev x11proto-core-dev libx11-dev tree lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses-dev libsdl1.2-dev build-essential libgtk-3-dev libglu1-mesa-dev freeglut3-dev git libxml2 lzop pngcrush schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev libncurses6 python3 tar
 
     - name: Install repo
       run: |
@@ -92,27 +65,18 @@ jobs:
       run: |
         mkdir workspace
         cd workspace
-        echo "workspace-folder=$(pwd)" >> $GITHUB_OUTPUT
         git config --global user.name "Ansh"
         git config --global user.email "ansh@example.com"
         repo init --depth=1 -u ${{ github.event.inputs.MANIFEST_URL }} -b ${{ github.event.inputs.MANIFEST_BRANCH }}
       id: pwd
 
     - name: Repo Sync
-      run: |
-        repo sync -j$(nproc --all) --force-sync
+      run: repo sync -j$(nproc --all) --force-sync
       working-directory: workspace
 
     - name: Clone device tree
-      run: |
-        git clone ${{ github.event.inputs.DEVICE_TREE_URL }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Clone common tree
-      if: github.event.inputs.COMMON_TREE_URL != ''
-      run: |
-        git clone ${{ github.event.inputs.COMMON_TREE_URL }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.COMMON_PATH }}
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+      run: git clone ${{ github.event.inputs.DEVICE_TREE_URL }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
+      working-directory: workspace
 
     - name: Set Swap Space
       uses: pierotofy/set-swap-space@master
@@ -124,20 +88,29 @@ jobs:
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
         
-        # [FIX] Force Clear Vendor Conflict in 'out' and 'device' tree
-        echo "🧹 Hard-cleaning vendor symlink path..."
-        rm -rf out/target/product/${{ github.event.inputs.DEVICE_NAME }}/root/vendor
-        rm -rf out/target/product/${{ github.event.inputs.DEVICE_NAME }}/recovery/root/vendor
-        
+        # 1. Device Tree Fix (Physical to System-Vendor)
         V_PATH="${{ github.event.inputs.DEVICE_PATH }}/recovery/root"
         if [ -d "$V_PATH/vendor" ] && [ ! -L "$V_PATH/vendor" ]; then
-            echo "📦 Moving physical vendor files to system/vendor..."
+            echo "📦 Fixing physical vendor in Device Tree..."
             mkdir -p $V_PATH/system/vendor
             cp -rf $V_PATH/vendor/* $V_PATH/system/vendor/
             rm -rf $V_PATH/vendor
         fi
 
+        # 2. Lunch to initialize out directory
         lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng
+        
+        # 3. THE BRUTE FORCE FIX (Force Symlink in OUT directory)
+        echo "🚀 Tricking Ninja: Creating forced symlink in out/ folder..."
+        mkdir -p out/target/product/${{ github.event.inputs.DEVICE_NAME }}/root
+        rm -rf out/target/product/${{ github.event.inputs.DEVICE_NAME }}/root/vendor
+        ln -sf /system/vendor out/target/product/${{ github.event.inputs.DEVICE_NAME }}/root/vendor
+        
+        mkdir -p out/target/product/${{ github.event.inputs.DEVICE_NAME }}/recovery/root
+        rm -rf out/target/product/${{ github.event.inputs.DEVICE_NAME }}/recovery/root/vendor
+        ln -sf /system/vendor out/target/product/${{ github.event.inputs.DEVICE_NAME }}/recovery/root/vendor
+
+        # 4. Final Build
         make clean
         make ${{ github.event.inputs.BUILD_TARGET }}image -j$(nproc --all)
       working-directory: workspace
@@ -145,10 +118,8 @@ jobs:
     - name: Upload to Release
       uses: softprops/action-gh-release@v2
       with:
-        files: | 
-          workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/${{ github.event.inputs.BUILD_TARGET }}.img
+        files: workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/${{ github.event.inputs.BUILD_TARGET }}.img
         name: ${{ github.event.inputs.DEVICE_NAME }}-${{ github.run_id }}
         tag_name: ${{ github.run_id }}
-        body: "TWRP Recovery Build for ${{ github.event.inputs.DEVICE_NAME }}"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
