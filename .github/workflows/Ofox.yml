@@ -27,7 +27,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Cleanup Space (Crucial for TWRP 12.1)
+    - name: Cleanup Space
       run: |
         sudo rm -rf /usr/share/dotnet /etc/mysql /usr/local/lib/android /opt/ghc /usr/share/swift
         sudo apt clean
@@ -60,13 +60,11 @@ jobs:
         mkdir workspace && cd workspace
         git config --global user.name "Ansh_m14x"
         git config --global user.email "ansh@example.com"
-        # Using AOSP Minimal Manifest for better Dynamic Partition support
         repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b ${{ github.event.inputs.MANIFEST_BRANCH }}
         repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
       
     - name: Clone Device Tree
       run: |
-        # Make sure path matches DEVICE_PATH in BoardConfig
         git clone ${{ github.event.inputs.DEVICE_TREE_URL }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} workspace/device/oppo/${{ github.event.inputs.DEVICE_NAME }}
 
     - name: Build TWRP
@@ -74,9 +72,15 @@ jobs:
         cd workspace
         export ALLOW_MISSING_DEPENDENCIES=true
         source build/envsetup.sh
-        # Lunch target is now twrp_ instead of omni_
-        lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
-        make recoveryimage -j$(nproc --all)
+        
+        # Force Clean Step to avoid 99% rsync error
+        rm -rf out/target/product/${{ github.event.inputs.DEVICE_NAME }}/recovery
+        rm -rf out/target/product/${{ github.event.inputs.DEVICE_NAME }}/root/vendor
+        rm -rf out/target/product/${{ github.event.inputs.DEVICE_NAME }}/obj/PACKAGING/recovery_intermediates
+        
+        # Build Commands
+        lunch twp_${{ github.event.inputs.DEVICE_NAME }}-eng || lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
+        mka recoveryimage -j$(nproc --all)
 
     - name: Upload Recovery
       uses: actions/upload-artifact@v4
