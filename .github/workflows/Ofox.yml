@@ -87,32 +87,11 @@ jobs:
       run: |
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
+        
+        # 🏗️ Setup lunch and start build
         lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng
-
-        # 🚀 SMART WATCHDOG: Ensures directory structure exists to prevent 'mkdir' failure
-        (
-          echo "🕵️ Watchdog: Monitoring for folder/symlink conflicts..."
-          while true; do
-            for path in out/target/product/${{ github.event.inputs.DEVICE_NAME }}/root out/target/product/${{ github.event.inputs.DEVICE_NAME }}/recovery/root; do
-              # 1. Agar ye path galti se symlink hai, toh use asli folder mein convert karo
-              # Kyunki build system ko iske andar folders (etc/selinux) banane hain
-              if [ -L "$path/vendor" ]; then
-                rm -f "$path/vendor"
-              fi
-              
-              # 2. Folder structure pehle se hi bana kar rakho
-              mkdir -p "$path/vendor/etc/selinux"
-            done
-            sleep 1
-          done
-        ) &
-        WATCHDOG_PID=$!
-
-        # 🏗️ Actual Build Start
-        echo "🏗️ Starting Build (Watchdog PID: $WATCHDOG_PID)..."
+        echo "🏗️ Starting Build for ${{ github.event.inputs.DEVICE_NAME }}..."
         make ${{ github.event.inputs.BUILD_TARGET }}image -j$(nproc --all)
-
-        kill $WATCHDOG_PID
       working-directory: workspace
 
     - name: Upload to Release
