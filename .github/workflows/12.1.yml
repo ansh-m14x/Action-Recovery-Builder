@@ -1,108 +1,116 @@
-name: OrangeFox Recovery Build
+name: OrangeFox - Build (Oppo A31)
 
 on:
   workflow_dispatch:
     inputs:
-      MANIFEST_URL:
-        description: 'MANIFEST_URL'
-        required: true
-        default: 'https://gitlab.com/OrangeFox/Manifest.git'
       MANIFEST_BRANCH:
-        description: 'MANIFEST_BRANCH'
+        description: 'OrangeFox Manifest Branch'
         required: true
-        default: 'fox_12.1'
-      DEVICE_TREE_URL:
-        description: 'DEVICE_TREE_URL'
+        default: '12.1'
+        type: choice
+        options:
+        - 12.1
+        - 11.0
+      DEVICE_TREE:
+        description: 'Custom Recovery Tree URL'
         required: true
         default: 'https://github.com/ansh-m14x/android-recovery-OP4C7D'
       DEVICE_TREE_BRANCH:
-        description: 'DEVICE_TREE_BRANCH'
+        description: 'Custom Recovery Tree Branch'
         required: true
         default: 'patched-12.1'
       DEVICE_PATH:
-        description: 'DEVICE_PATH'
+        description: 'Device Path (e.g. device/oppo/OP4C7D)'
         required: true
         default: 'device/oppo/OP4C7D'
       DEVICE_NAME:
-        description: 'DEVICE_NAME'
+        description: 'Device Codename'
         required: true
         default: 'OP4C7D'
-      MAKEFILE_NAME:
-        description: 'MAKEFILE_NAME'
-        required: true
-        default: 'twrp_OP4C7D'
       BUILD_TARGET:
-        description: 'BUILD_TARGET'
+        description: 'Build Target'
         required: true
         default: 'recovery'
 
 jobs:
   build:
+    name: Build OrangeFox by ${{ github.actor }}
+    runs-on: ubuntu-22.04
     if: github.event.repository.owner.id == github.event.sender.id
-    runs-on: ubuntu-22.04 # 24.04 par kabhi kabhi older dependencies ka issue aata hai
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       contents: write
     steps:
-    - name: Check Out
+    - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Cleanup
+    - name: Clean-up Environment
       uses: rokibhasansagar/slimhub_actions@main
-
-    - name: Prepare environment
-      run: |
-        sudo apt update
-        sudo apt install -y gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib libc6-dev lib32ncurses-dev x11proto-core-dev libx11-dev tree lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses-dev libsdl1.2-dev build-essential libgtk-3-dev libglu1-mesa-dev freeglut3-dev git libxml2 lzop pngcrush schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev libncurses6 python3 tar zip unzip
-
-    - name: Install repo
-      run: |
-        mkdir ~/bin
-        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
-        chmod a+x ~/bin/repo
-        sudo ln -sf ~/bin/repo /usr/bin/repo
-
-    - name: Initialize repo
-      run: |
-        mkdir workspace
-        cd workspace
-        git config --global user.name "Ansh"
-        git config --global user.email "ansh@example.com"
-        repo init --depth=1 -u ${{ github.event.inputs.MANIFEST_URL }} -b ${{ github.event.inputs.MANIFEST_BRANCH }}
-
-    - name: Repo Sync
-      run: |
-        repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
-      working-directory: workspace
-
-    - name: Clone device tree
-      run: git clone ${{ github.event.inputs.DEVICE_TREE_URL }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
-      working-directory: workspace
 
     - name: Set Swap Space
       uses: pierotofy/set-swap-space@master
       with:
-        swap-size-gb: 12
-
-    - name: Building recovery
+        swap-size-gb: 24
+      
+    - name: Install Build Tools
       run: |
+        sudo apt update
+        sudo apt install -y git aria2 python3 python3-pip zip unzip
+        git clone https://gitlab.com/OrangeFox/misc/scripts
+        cd scripts
+        sudo bash setup/android_build_env.sh
+      
+    - name: Sync OrangeFox Source
+      run: |
+        mkdir -p ${GITHUB_WORKSPACE}/OrangeFox
+        cd ${GITHUB_WORKSPACE}/OrangeFox
+        git config --global user.name "Ansh"
+        git config --global user.email "ansh@example.com"
+        git clone https://gitlab.com/OrangeFox/sync.git
+        cd sync
+        ./orangefox_sync.sh --branch ${{ github.event.inputs.MANIFEST_BRANCH }} --path ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
+
+    - name: Clone Device Tree
+      run: |
+        cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
+        git clone ${{ github.event.inputs.DEVICE_TREE }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
+        echo "COMMIT_ID=$(git -C ${{ github.event.inputs.DEVICE_PATH }} rev-parse --short HEAD)" >> $GITHUB_ENV
+
+    - name: Build OrangeFox
+      run: |
+        cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
         export FOX_BUILD_DEVICE=${{ github.event.inputs.DEVICE_NAME }}
         export LC_ALL=C
         
-        # 🏗️ Setup lunch and start build
-        lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng
-        echo "🏗️ Starting OrangeFox Build for ${{ github.event.inputs.DEVICE_NAME }}..."
+        # Build command for twrp_OP4C7D
+        lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
         mka ${{ github.event.inputs.BUILD_TARGET }}image -j$(nproc --all)
-      working-directory: workspace
 
-    - name: Upload to Release
+    - name: Verify Build
+      run: |
+        OUT_PATH=${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}/out/target/product/${{ github.event.inputs.DEVICE_NAME }}
+        if [ -f $OUT_PATH/OrangeFox*.img ]; then
+            echo "BUILD_SUCCESS=true" >> $GITHUB_ENV
+            echo "FINAL_PATH=$OUT_PATH" >> $GITHUB_ENV
+        else
+            echo "Build failed! Image not found."
+            exit 1
+        fi
+
+    - name: Upload Release
+      if: env.BUILD_SUCCESS == 'true'
       uses: softprops/action-gh-release@v2
       with:
         files: |
-          workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/OrangeFox*.zip
-          workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/recovery.img
-        name: OrangeFox-${{ github.event.inputs.DEVICE_NAME }}-${{ github.run_id }}
+          ${{ env.FINAL_PATH }}/OrangeFox*.img
+          ${{ env.FINAL_PATH }}/OrangeFox*.zip
+        name: OrangeFox Unofficial - ${{ github.event.inputs.DEVICE_NAME }}
         tag_name: ${{ github.run_id }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        body: |
+          Device: ${{ github.event.inputs.DEVICE_NAME }}
+          Branch: ${{ github.event.inputs.DEVICE_TREE_BRANCH }}
+          Commit: ${{ env.COMMIT_ID }}
+          Status: Stable Build (System Mount Path Fixed)
