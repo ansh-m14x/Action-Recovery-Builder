@@ -53,6 +53,8 @@ jobs:
       run: |
         sudo apt update
         sudo apt install -y git aria2 python3 python3-pip zip unzip
+        # Folder conflict fix
+        rm -rf scripts
         git clone https://gitlab.com/OrangeFox/misc/scripts
         cd scripts
         sudo bash setup/android_build_env.sh
@@ -63,6 +65,7 @@ jobs:
         cd ${GITHUB_WORKSPACE}/OrangeFox
         git config --global user.name "Ansh"
         git config --global user.email "ansh@example.com"
+        # GitLab Sync script logic
         git clone https://gitlab.com/OrangeFox/sync.git
         cd sync
         ./orangefox_sync.sh --branch ${{ github.event.inputs.MANIFEST_BRANCH }} --path ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
@@ -81,15 +84,15 @@ jobs:
         export FOX_BUILD_DEVICE=${{ github.event.inputs.DEVICE_NAME }}
         export LC_ALL=C
         
-        # ⚡ Omni-specific lunch command
-        lunch omni_${{ github.event.inputs.DEVICE_NAME }}-eng
+        # ⚡ Omni-specific lunch command (Falls back to twrp if omni fails)
+        lunch omni_${{ github.event.inputs.DEVICE_NAME }}-eng || lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
         
         mka recoveryimage -j$(nproc --all)
 
     - name: Verify and Pack
       run: |
         OUT_PATH=${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}/out/target/product/${{ github.event.inputs.DEVICE_NAME }}
-        if [ -f $OUT_PATH/OrangeFox*.img ]; then
+        if [ -f $OUT_PATH/OrangeFox*.img ] || [ -f $OUT_PATH/recovery.img ]; then
             echo "BUILD_SUCCESS=true" >> $GITHUB_ENV
             echo "FINAL_PATH=$OUT_PATH" >> $GITHUB_ENV
         else
@@ -104,6 +107,7 @@ jobs:
         files: |
           ${{ env.FINAL_PATH }}/OrangeFox*.img
           ${{ env.FINAL_PATH }}/OrangeFox*.zip
+          ${{ env.FINAL_PATH }}/recovery.img
         name: OrangeFox Unofficial - ${{ github.event.inputs.DEVICE_NAME }}
         tag_name: ${{ github.run_id }}
         body: |
