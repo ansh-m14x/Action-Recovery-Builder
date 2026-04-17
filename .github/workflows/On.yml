@@ -1,4 +1,4 @@
-name: Recovery Build - Ubuntu 22.04 (CPH2015)
+name: RedWolf Recovery Build - Ubuntu 22.04
 
 on:
   workflow_dispatch:
@@ -6,19 +6,19 @@ on:
       DEVICE_TREE_URL:
         description: Device Tree URL
         required: true
-        default: https://github.com/ansh-m14x/android-recovery-OP4C7D
+        default: 'https://github.com/ansh-m14x/android-recovery-OP4C7D'
       DEVICE_TREE_BRANCH:
         description: Device Tree Branch
         required: true
-        default: rw
+        default: 'redwolf'
       DEVICE_PATH:
         description: Sync Path
         required: true
-        default: device/oppo/OP4C7D
+        default: 'device/oppo/OP4C7D'
       DEVICE_NAME:
         description: Device Name
         required: true
-        default: OP4C7D
+        default: 'OP4C7D'
 
 jobs:
   build:
@@ -46,23 +46,21 @@ jobs:
         lib32ncurses5-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip \
         device-tree-compiler libtinfo5
         
-        # RedWolf ke liye Python2 link karna zaroori hai
         sudo ln -sf /usr/bin/python2 /usr/bin/python
 
-    - name: Install Repo Tool
-      run: |
-        mkdir -p ~/bin
-        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
-        chmod a+x ~/bin/repo
-        sudo ln -sf ~/bin/repo /usr/bin/repo
-      
     - name: Initialize & Sync RedWolf
       run: |
         mkdir workspace && cd workspace
         git config --global user.name "Ansh_m14x"
         git config --global user.email "ansh@example.com"
-        # RedWolf Official Manifest
-        repo init -u https://github.com/RedWolfRecovery/rw_manifest.git -b rw
+        
+        # 1. Init using HTTPS
+        repo init -u https://github.com/RedWolfRecovery/rw_manifest.git -b rw --depth=1
+        
+        # 2. Fix the broken path in manifest before sync
+        sed -i 's|path="TeamWin/.repo/|path="|g' .repo/manifests/default.xml
+        
+        # 3. Sync
         repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
       
     - name: Clone Device Tree
