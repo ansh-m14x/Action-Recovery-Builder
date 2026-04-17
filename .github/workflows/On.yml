@@ -1,84 +1,90 @@
-name: RedWolf Recovery Build
+name: Recovery Build - Ubuntu 22.04 (CPH2015)
 
 on:
   workflow_dispatch:
     inputs:
       DEVICE_TREE_URL:
-        description: 'DEVICE_TREE_URL'
+        description: Device Tree URL
         required: true
-        default: 'https://github.com/ansh-m14x/android-recovery-OP4C7D'
+        default: https://github.com/ansh-m14x/android-recovery-OP4C7D
       DEVICE_TREE_BRANCH:
-        description: 'DEVICE_TREE_BRANCH'
+        description: Device Tree Branch
         required: true
-        default: 'rw'
+        default: rw
       DEVICE_PATH:
-        description: 'DEVICE_PATH'
+        description: Sync Path
         required: true
-        default: 'device/oppo/OP4C7D'
+        default: device/oppo/OP4C7D
       DEVICE_NAME:
-        description: 'DEVICE_NAME'
+        description: Device Name
         required: true
-        default: 'OP4C7D'
+        default: OP4C7D
 
 jobs:
   build:
-    if: github.event.repository.owner.id == github.event.sender.id
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
     steps:
-    - name: Check Out
+    - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Cleanup
-      uses: rokibhasansagar/slimhub_actions@main
-
-    - name: Prepare environment
+    - name: Cleanup Space
       run: |
-        sudo apt update
-        sudo apt install -y git-core gnupg flex bison gperf build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev x11proto-core-dev libx11-dev lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc unzip bc python3
+        sudo rm -rf /usr/share/dotnet /etc/mysql /usr/local/lib/android /opt/ghc
+        sudo apt clean
 
-    - name: Install repo
+    - name: Install Build Packages
       run: |
-        mkdir ~/bin
+        sudo apt-get update
+        sudo apt-get -y install libncurses5 python2 python3 \
+        git ccache automake flex lzop bison gperf build-essential zip curl \
+        zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 \
+        libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool \
+        make optipng maven libssl-dev pwgen libswitch-perl policycoreutils \
+        minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 \
+        lib32ncurses5-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip \
+        device-tree-compiler libtinfo5
+        
+        # RedWolf ke liye Python2 link karna zaroori hai
+        sudo ln -sf /usr/bin/python2 /usr/bin/python
+
+    - name: Install Repo Tool
+      run: |
+        mkdir -p ~/bin
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod a+x ~/bin/repo
         sudo ln -sf ~/bin/repo /usr/bin/repo
-
-    - name: Initialize repo
+      
+    - name: Initialize & Sync RedWolf
       run: |
-        mkdir workspace
-        cd workspace
-        git config --global user.name "Ansh"
+        mkdir workspace && cd workspace
+        git config --global user.name "Ansh_m14x"
         git config --global user.email "ansh@example.com"
-        # RedWolf official manifest
+        # RedWolf Official Manifest
         repo init -u https://github.com/RedWolfRecovery/rw_manifest.git -b rw
-      id: pwd
+        repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
+      
+    - name: Clone Device Tree
+      run: |
+        git clone ${{ inputs.DEVICE_TREE_URL }} -b ${{ inputs.DEVICE_TREE_BRANCH }} workspace/${{ inputs.DEVICE_PATH }}
 
-    - name: Repo Sync
-      run: repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
-      working-directory: workspace
-
-    - name: Clone device tree
-      run: git clone ${{ github.event.inputs.DEVICE_TREE_URL }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
-      working-directory: workspace
-
-    - name: Building RedWolf
+    - name: Build RedWolf
       run: |
         cd workspace
-        source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
-        # Lunch with your device makefile
-        lunch omni_${{ github.event.inputs.DEVICE_NAME }}-eng
+        source build/envsetup.sh
+        lunch omni_${{ inputs.DEVICE_NAME }}-eng
         mka recoveryimage -j$(nproc --all)
-      shell: bash
 
-    - name: Upload to Release
-      uses: softprops/action-gh-release@v2
+    - name: Release Build
+      uses: ncipollo/release-action@v1.12.0
       with:
-        files: |
-          workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/recovery.img
-        name: RedWolf-${{ github.event.inputs.DEVICE_NAME }}-${{ github.run_id }}
-        tag_name: ${{ github.run_id }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        artifacts: workspace/out/target/product/${{ inputs.DEVICE_NAME }}/recovery.img
+        name: RedWolf for ${{ inputs.DEVICE_NAME }} - ${{ github.run_id }}
+        tag: ${{ inputs.DEVICE_NAME }}-${{ github.run_id }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+        body: |
+          Build by Ansh_m14x
+          Device: ${{ inputs.DEVICE_NAME }} (Oppo A31)
+          Target: RedWolf Recovery Image
