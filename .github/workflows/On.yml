@@ -61,13 +61,10 @@ jobs:
         git config --global user.name "Ansh_m14x"
         git config --global user.email "ansh@example.com"
         
-        # 1. Init
-        repo init -u https://github.com/RedWolfRecovery/rw_manifest.git -b rw --depth=1
+        # Apne forked manifest ka use
+        repo init -u https://github.com/ansh-m14x/rw_manifest.git -b rw --depth=1
         
-        # 2. Path Patch for old manifest
-        sed -i 's|path="TeamWin/.repo/|path="|g' .repo/manifests/default.xml
-        
-        # 3. Sync
+        # Ab koi 'sed' ki zaroorat nahi, direct sync
         repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
       
     - name: Clone Device Tree
@@ -91,5 +88,5 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         body: |
           Build by Ansh_m14x
-          Device: ${{ inputs.DEVICE_NAME }} (Oppo A31)
+          Device: ${{ inputs.DEVICE_NAME }}
           Target: RedWolf Recovery Image
