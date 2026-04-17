@@ -37,14 +37,13 @@ jobs:
     - name: Install Build Packages
       run: |
         sudo apt-get update
-        sudo apt-get -y install libncurses5 python2 python3 \
-        git ccache automake flex lzop bison gperf build-essential zip curl \
-        zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 \
-        libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool \
-        make optipng maven libssl-dev pwgen libswitch-perl policycoreutils \
-        minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 \
-        lib32ncurses5-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip \
-        device-tree-compiler libtinfo5
+        sudo apt-get -y install libncurses5 python2 python3 git ccache automake \
+        flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib \
+        libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools \
+        pngcrush schedtool dpkg-dev liblz4-tool make optipng maven libssl-dev \
+        pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl \
+        libxml-simple-perl bc libc6-dev-i386 lib32ncurses5-dev libx11-dev \
+        lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler libtinfo5
         
         sudo ln -sf /usr/bin/python2 /usr/bin/python
 
@@ -61,10 +60,10 @@ jobs:
         git config --global user.name "Ansh_m14x"
         git config --global user.email "ansh@example.com"
         
-        # Apne forked manifest ka use
-        repo init -u https://github.com/ansh-m14x/rw_manifest.git -b rw --depth=1
+        # '--depth=1' hata diya hai kyunki purani repos fetch karne mein dikkat karti hain
+        repo init -u https://github.com/ansh-m14x/rw_manifest.git -b rw
         
-        # Ab koi 'sed' ki zaroorat nahi, direct sync
+        # '--no-clone-bundle' add kiya hai network stability ke liye
         repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
       
     - name: Clone Device Tree
