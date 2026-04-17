@@ -48,16 +48,23 @@ jobs:
         
         sudo ln -sf /usr/bin/python2 /usr/bin/python
 
+    - name: Install Repo Tool
+      run: |
+        mkdir -p ~/bin
+        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+        chmod a+x ~/bin/repo
+        echo "$HOME/bin" >> $GITHUB_PATH
+
     - name: Initialize & Sync RedWolf
       run: |
-        mkdir workspace && cd workspace
+        mkdir -p workspace && cd workspace
         git config --global user.name "Ansh_m14x"
         git config --global user.email "ansh@example.com"
         
-        # 1. Init using HTTPS
+        # 1. Init
         repo init -u https://github.com/RedWolfRecovery/rw_manifest.git -b rw --depth=1
         
-        # 2. Fix the broken path in manifest before sync
+        # 2. Path Patch for old manifest
         sed -i 's|path="TeamWin/.repo/|path="|g' .repo/manifests/default.xml
         
         # 3. Sync
