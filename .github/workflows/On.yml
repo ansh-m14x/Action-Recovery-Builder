@@ -1,4 +1,4 @@
-name: SHRP Recovery Build
+name: SHRP Recovery Build (Noble Fix)
 
 on:
   workflow_dispatch:
@@ -39,23 +39,23 @@ on:
 jobs:
   build:
     if: github.event.repository.owner.id == github.event.sender.id
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
     - name: Check Out
-      uses: checkout@v4
+      uses: actions/checkout@v4
 
-    - name: Cleanup
+    - name: Cleanup Actions
       uses: rokibhasansagar/slimhub_actions@main
 
-    - name: Install Build Packages (Fixing Dependencies)
+    - name: Install Build Packages (Legacy Noble Fix)
       run: |
-        # Add Focal repos for python2 and libncurses5
+        # Ubuntu 24.04 par python2 aur libncurses5 ke liye Focal repo zaroori hai
         echo "deb http://archive.ubuntu.com/ubuntu/ focal main universe" | sudo tee -a /etc/apt/sources.list
         sudo apt-get update
         
-        # Install Merged & Cleaned List
+        # Essential packages only (Conflict-prone packages removed)
         sudo apt-get -y install libncurses5 python2 python3 \
         git ccache automake flex lzop bison gperf build-essential zip curl \
         zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev \
@@ -64,18 +64,18 @@ jobs:
         libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip \
         device-tree-compiler libtinfo5
         
-        # Fix Python Symlink
+        # Build system ko python dhoondne mein help karo
         sudo ln -sf /usr/bin/python2 /usr/bin/python
         sudo ln -sf /usr/bin/python2 /usr/bin/python2
 
-    - name: Install repo
+    - name: Install Google Repo
       run: |
         mkdir ~/bin
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod a+x ~/bin/repo
         sudo ln -sf ~/bin/repo /usr/bin/repo
 
-    - name: Initialize repo
+    - name: Initialize Recovery Workspace
       run: |
         mkdir workspace
         cd workspace
@@ -84,31 +84,31 @@ jobs:
         repo init --depth=1 -u ${{ github.event.inputs.MANIFEST_URL }} -b ${{ github.event.inputs.MANIFEST_BRANCH }}
       id: pwd
 
-    - name: Repo Sync
+    - name: Sync Sources
       run: repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
       working-directory: workspace
 
-    - name: Clone device tree
+    - name: Clone Oppo A31 Tree
       run: git clone ${{ github.event.inputs.DEVICE_TREE_URL }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
       working-directory: workspace
 
-    - name: Set Swap Space
+    - name: Set Swap (12GB)
       uses: pierotofy/set-swap-space@master
       with:
         swap-size-gb: 12
 
-    - name: Building SHRP
+    - name: Build SHRP
       run: |
         cd workspace
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
         
         lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng
-        echo "🏗️ Starting Build for ${{ github.event.inputs.DEVICE_NAME }}..."
+        echo "🏗️ Building ${{ github.event.inputs.DEVICE_NAME }}..."
         mka ${{ github.event.inputs.BUILD_TARGET }} -j$(nproc --all)
       shell: bash
 
-    - name: Upload to Release
+    - name: Upload Release
       uses: softprops/action-gh-release@v2
       with:
         files: |
@@ -118,3 +118,4 @@ jobs:
         tag_name: ${{ github.run_id }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
