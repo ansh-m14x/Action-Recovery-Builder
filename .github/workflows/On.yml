@@ -44,30 +44,27 @@ jobs:
       contents: write
     steps:
     - name: Check Out
-      uses: actions/checkout@v4
+      uses: checkout@v4
 
     - name: Cleanup
       uses: rokibhasansagar/slimhub_actions@main
 
-    - name: Install Build Packages (Legacy Fix for Ubuntu 24.04)
+    - name: Install Build Packages (Fixing Dependencies)
       run: |
-        # Add Ubuntu 20.04 (Focal) repositories for python2 and libncurses5
-        echo "deb http://archive.ubuntu.com/ubuntu/ focal main" | sudo tee -a /etc/apt/sources.list
-        echo "deb http://archive.ubuntu.com/ubuntu/ focal universe" | sudo tee -a /etc/apt/sources.list
-        
+        # Add Focal repos for python2 and libncurses5
+        echo "deb http://archive.ubuntu.com/ubuntu/ focal main universe" | sudo tee -a /etc/apt/sources.list
         sudo apt-get update
         
-        # Install all required packages including legacy ones
+        # Install Merged & Cleaned List
         sudo apt-get -y install libncurses5 python2 python3 \
         git ccache automake flex lzop bison gperf build-essential zip curl \
-        zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 \
+        zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev \
         libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool \
-        make optipng maven libssl-dev pwgen libswitch-perl policycoreutils \
-        minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 \
-        lib32ncurses5-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip \
+        make optipng maven libssl-dev pwgen bc libc6-dev-i386 \
+        libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip \
         device-tree-compiler libtinfo5
         
-        # Ensure python points to python2 as required by AOSP/TWRP build systems
+        # Fix Python Symlink
         sudo ln -sf /usr/bin/python2 /usr/bin/python
         sudo ln -sf /usr/bin/python2 /usr/bin/python2
 
