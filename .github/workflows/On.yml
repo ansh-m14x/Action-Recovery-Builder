@@ -49,12 +49,15 @@ jobs:
     - name: Cleanup
       uses: rokibhasansagar/slimhub_actions@main
 
-    - name: Install Build Packages (Merged List)
+    - name: Install Build Packages (Legacy Fix for Ubuntu 24.04)
       run: |
+        # Add Ubuntu 20.04 (Focal) repositories for python2 and libncurses5
+        echo "deb http://archive.ubuntu.com/ubuntu/ focal main" | sudo tee -a /etc/apt/sources.list
+        echo "deb http://archive.ubuntu.com/ubuntu/ focal universe" | sudo tee -a /etc/apt/sources.list
+        
         sudo apt-get update
-        # Adding Universe for legacy packages
-        sudo add-apt-repository universe -y
-        sudo apt-get update
+        
+        # Install all required packages including legacy ones
         sudo apt-get -y install libncurses5 python2 python3 \
         git ccache automake flex lzop bison gperf build-essential zip curl \
         zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 \
@@ -64,8 +67,9 @@ jobs:
         lib32ncurses5-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip \
         device-tree-compiler libtinfo5
         
-        # Ensure 'python' points to 'python2' for TWRP/SHRP scripts
+        # Ensure python points to python2 as required by AOSP/TWRP build systems
         sudo ln -sf /usr/bin/python2 /usr/bin/python
+        sudo ln -sf /usr/bin/python2 /usr/bin/python2
 
     - name: Install repo
       run: |
