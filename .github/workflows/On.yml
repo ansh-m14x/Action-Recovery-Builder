@@ -1,92 +1,207 @@
-name: SHRP Recovery Build - Oppo A31
+name: SkyHawk [SHRP]
 
 on:
   workflow_dispatch:
     inputs:
-      MANIFEST_URL:
-        description: 'SHRP Manifest URL'
+      MANIFEST:
+        description: 'SHRP Manifest (For old SHRP manifest, use v3_9.0, v3_11.0)'
         required: true
-        default: 'https://github.com/SHRP/manifest'
+        default: 'https://github.com/SHRP-Reborn/manifest.git'
       MANIFEST_BRANCH:
-        description: 'SHRP Branch'
+        description: 'SHRP Manifest Branch'
         required: true
-        default: 'shrp-12.1'
-      DEVICE_TREE_URL:
-        description: 'Device Tree URL'
+        default: ''
+        type: choice
+        options:
+        - shrp-12.1
+        - shrp-9.0
+        - v3_11.0
+        - v3_9.0
+      DEVICE_TREE:
+        description: 'Custom Recovery Tree' # Your already made Device Tree for TWRP
         required: true
-        default: 'https://github.com/ansh-m14x/recovery-oppo-A31-OP4C7D'
+        default: 'https://github.com/mlm-games/twrp_lenovo_7305x_m7_mt8765_P' 
       DEVICE_TREE_BRANCH:
-        description: 'Device Tree Branch'
+        description: 'Custom Recovery Tree Branch' # Your Device Tree Branch, make sure it's right.
         required: true
-        default: 'shrp'
+        default: 'shrp-9.0'
       DEVICE_PATH:
-        description: 'Device Path'
+        description: 'Specify your Device Path' # As is, just like your DEVICE_PATH in your BoardConfig.mk
         required: true
-        default: 'device/oppo/OP4C7D'
+        default: 'device/lenovo/mt8765_P'
       DEVICE_NAME:
-        description: 'Device Name'
+        description: 'Specify your Device Codename' # As is, just like your PRODUCT_DEVICE in your device tree.
         required: true
-        default: 'OP4C7D'
-      MAKEFILE_NAME:
-        description: 'Makefile Name'
+        default: 'mt8765_P'
+      BUILD_TARGET:
+        description: 'Specify your Build Target' # Pick among boot, recovery and vendor_boot
         required: true
-        default: 'shrp_OP4C7D'
+        default: 'recovery'
+        type: choice
+        options:
+        - boot
+        - recovery
+        - vendorboot
+      LDCHECK:
+        description: 'Use LDCHECK'
+        required: false
+        default: 'false'
+        type: boolean
+      LDCHECKPATH:
+        description: 'Path of blobs to check' # Use it know what kind of dependencies your missing for decryption blobs.
+        required: true
+        default: 'system/bin/qseecomd'
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    # Using Ubuntu 20.04 container for native Python 2 and build tool compatibility
-    container:
-      image: ubuntu:20.04
-
+    name: Build SHRP by ${{ github.actor }}
+    runs-on: ubuntu-20.04
+    if: github.event.repository.owner.id == github.event.sender.id
+    env:
+      OUTPUT_DIR: ${{ github.workspace }}/android-recovery/out/target/product
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Prepare Environment
+    - name: Check Out
+      uses: actions/checkout@v6
+      
+    - name: Display Inputs
       run: |
-        export DEBIAN_FRONTEND=noninteractive
-        apt-get update
-        apt-get install -y \
-          git-core gnupg flex bison gperf build-essential zip curl zlib1g-dev \
-          gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev x11proto-core-dev \
-          libx11-dev lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc unzip python2 \
-          bc liblz4-tool libssl-dev rsync maven wget lzip python3 python-is-python2
+        echo "Displaying variables/inputs."
+        echo "Manifest Branch: ${{ inputs.MANIFEST_BRANCH }}"
+        echo "Device Tree: ${{ inputs.DEVICE_TREE }}"
+        echo "Device Branch: ${{ inputs.DEVICE_TREE_BRANCH }}"
+        echo "Build Target: ${{ inputs.BUILD_TARGET }}image"
 
-    - name: Install Google Repo
+    - name: Cleanup
+      uses: rokibhasansagar/slimhub_actions@main
+      
+    - name: Set Swap Space
+      uses: pierotofy/set-swap-space@master
+      with:
+        swap-size-gb: 12
+
+    - name: Check Manifest Branch
       run: |
-        mkdir -p ~/bin
+        if [ ${{ inputs.MANIFEST_BRANCH }} == 'v3_11.0' ] || [ ${{ inputs.MANIFEST_BRANCH }} == 'shrp-12.1' ]; then
+            echo "CHECK_LEGACY_BRANCH=false" >> $GITHUB_ENV
+        else
+            echo "CHECK_LEGACY_BRANCH=true" >> $GITHUB_ENV
+        fi
+
+    - name: Prepare the environment
+      run: |
+        sudo apt update && sudo apt -y upgrade && sudo apt -y install gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev libtinfo5 libgflags-dev libncurses5 python3
+
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        max-size: "10G"
+
+    - name: Install OpenJDK
+      uses: actions/setup-java@v5
+      with:
+        distribution: 'zulu'
+        java-version: '8'
+        
+    - name: Install Git-Repo
+      run: |
+        mkdir ~/bin
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod a+x ~/bin/repo
-        ln -sf ~/bin/repo /usr/bin/repo
+        sudo ln -sf ~/bin/repo /usr/bin/repo
 
-    - name: Initialize & Sync
+    - name: Initialize Repo
       run: |
-        mkdir workspace
-        cd workspace
-        git config --global user.name "Ansh"
-        git config --global user.email "ansh@example.com"
-        repo init --depth=1 -u ${{ github.event.inputs.MANIFEST_URL }} -b ${{ github.event.inputs.MANIFEST_BRANCH }}
-        repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
+        mkdir android-recovery
+        cd android-recovery
+        git config --global user.name "${{ github.actor }}"
+        git config --global user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+        repo init --depth=1 -u ${{ inputs.MANIFEST }} -b ${{ inputs.MANIFEST_BRANCH }}
 
+    - name: Repo Sync
+      run: |
+        cd android-recovery
+        repo sync -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+      
     - name: Clone Device Tree
       run: |
-        cd workspace
-        git clone ${{ github.event.inputs.DEVICE_TREE_URL }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ${{ github.event.inputs.DEVICE_PATH }}
+        cd android-recovery
+        git clone ${{ inputs.DEVICE_TREE }} -b ${{ inputs.DEVICE_TREE_BRANCH }} ./${{ inputs.DEVICE_PATH }}
+        cd ${{ inputs.DEVICE_PATH }}
+        echo "COMMIT_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
 
-    - name: Build SHRP
+    - name: Check Build Makefile
       run: |
-        cd workspace
-        export ALLOW_MISSING_DEPENDENCIES=true
-        source build/envsetup.sh
-        lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng
-        mka recoveryimage -j$(nproc --all)
-      shell: bash
+        cd android-recovery
+        if [ -f ${{ inputs.DEVICE_PATH }}/twrp_${{ inputs.DEVICE_NAME}}.mk ]; then
+            echo "DEVICE_MAKEFILE=twrp_${{ inputs.DEVICE_NAME }}" >> $GITHUB_ENV
+        elif [ -f ${{ inputs.DEVICE_PATH }}/omni_${{ inputs.DEVICE_NAME}}.mk ]; then
+            echo "DEVICE_MAKEFILE=omni_${{ inputs.DEVICE_NAME }}" >> $GITHUB_ENV
+        else
+            echo "No recovery makefile file found!"
+        fi
+      continue-on-error: true
 
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v4
+    - name: Installing python2 for legacy builds
+      if: env.CHECK_LEGACY_BRANCH == 'true'
+      run: |
+        sudo apt-get install python2 python-is-python2
+
+    - name: Building SkyHawk
+      run: |
+        cd android-recovery
+        source build/envsetup.sh
+        export ALLOW_MISSING_DEPENDENCIES=true
+        lunch ${{ env.DEVICE_MAKEFILE }}-eng && make clean && mka ${{ inputs.BUILD_TARGET }}image -j$(nproc --all)
+        echo "Done building your ${{ inputs.BUILD_TARGET }}.img"
+
+    - name: Check if the recovery exists
+      if: always()
+      run: |
+        img_file=$(find "${{ env.OUTPUT_DIR }}" -name "${{ inputs.BUILD_TARGET }}*.img" -print -quit)
+        zip_file=$(find "${{ env.OUTPUT_DIR }}" -name "SHRP*.zip" -print -quit)
+        if [ -f "$img_file" ]; then
+            echo "CHECK_IMG_IS_OK=true" >> $GITHUB_ENV
+            echo "MD5_IMG=$(md5sum "$img_file" | cut -d ' ' -f 1)" >> $GITHUB_ENV
+        else
+            echo "Recovery out directory is empty."
+        fi
+        if [ -f "$zip_file" ]; then
+            echo "CHECK_ZIP_IS_OK=true" >> $GITHUB_ENV
+            echo "MD5_ZIP=$(md5sum "$zip_file" | cut -d ' ' -f 1)" >> $GITHUB_ENV
+        else
+            echo "::warning::The zip file isn't present but make sure the image is from only after 100% completion in build stage"
+        fi
+
+    - name: Set Build Date # Output will be use in Release
+      run: |
+        echo "BUILD_DATE=$(date +%Y%m%d)" >> $GITHUB_ENV
+      
+    - name: Upload to Release
+      if: always() && env.CHECK_IMG_IS_OK == 'true'
+      uses: softprops/action-gh-release@master
       with:
-        name: SHRP-OppoA31
-        path: |
-          workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/recovery.img
-          workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/SHRP*.zip
+        files: |
+          ${{ env.OUTPUT_DIR }}/${{ inputs.DEVICE_NAME }}/${{ inputs.BUILD_TARGET }}.img
+          ${{ env.OUTPUT_DIR }}/${{ inputs.DEVICE_NAME }}/SHRP*.zip
+          ${{ env.OUTPUT_DIR }}/${{ inputs.DEVICE_NAME }}/ramdisk*.*
+        name: Unofficial SHRP For ${{ inputs.DEVICE_NAME }} // ${{ env.BUILD_DATE }}
+        tag_name: ${{ github.run_id }}
+        body: |
+          Build: ${{ env.MANIFEST_BRANCH }}
+          Device: [Device Tree/Branch](${{ inputs.DEVICE_TREE }}/tree/${{ inputs.DEVICE_TREE_BRANCH }})
+          Commit: Most recent [commit](${{ inputs.DEVICE_TREE }}/commit/${{ env.COMMIT_ID }}) during building.
+        prerelease: true
+
+    - name: Run LDCheck
+      if: inputs.LDCHECK == 'true'
+      run: |
+        cd tools
+        mv -n libneeds ${{ env.OUTPUT_DIR }}/${{ inputs.DEVICE_NAME }}/recovery/root/
+        mv -n ldcheck ${{ env.OUTPUT_DIR }}/${{ inputs.DEVICE_NAME }}/recovery/root/
+        cd ${{ env.OUTPUT_DIR }}/${{ inputs.DEVICE_NAME }}/recovery/root
+        python3 ldcheck -p system/lib64:vendor/lib64:system/lib:vendor/lib -d ${{ inputs.LDCHECKPATH }}
+        echo "Done checking missing dependencies. Review, and reconfigure your tree."
+      continue-on-error: true
