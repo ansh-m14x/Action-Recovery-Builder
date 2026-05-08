@@ -1,121 +1,92 @@
-name: SHRP Recovery Build (Noble Fix)
+name: SHRP Recovery Build - Oppo A31
 
 on:
   workflow_dispatch:
     inputs:
       MANIFEST_URL:
-        description: 'MANIFEST_URL'
+        description: 'SHRP Manifest URL'
         required: true
         default: 'https://github.com/SHRP/manifest'
       MANIFEST_BRANCH:
-        description: 'MANIFEST_BRANCH'
+        description: 'SHRP Branch'
         required: true
         default: 'shrp-12.1'
       DEVICE_TREE_URL:
-        description: 'DEVICE_TREE_URL'
+        description: 'Device Tree URL'
         required: true
-        default: 'https://github.com/ansh-m14x/android-recovery-OP4C7D'
+        default: 'https://github.com/ansh-m14x/recovery-oppo-A31-OP4C7D'
       DEVICE_TREE_BRANCH:
-        description: 'DEVICE_TREE_BRANCH'
+        description: 'Device Tree Branch'
         required: true
         default: 'shrp'
       DEVICE_PATH:
-        description: 'DEVICE_PATH'
+        description: 'Device Path'
         required: true
         default: 'device/oppo/OP4C7D'
       DEVICE_NAME:
-        description: 'DEVICE_NAME'
+        description: 'Device Name'
         required: true
         default: 'OP4C7D'
       MAKEFILE_NAME:
-        description: 'MAKEFILE_NAME'
+        description: 'Makefile Name'
         required: true
         default: 'shrp_OP4C7D'
-      BUILD_TARGET:
-        description: 'BUILD_TARGET'
-        required: true
-        default: 'shrp'
 
 jobs:
   build:
-    if: github.event.repository.owner.id == github.event.sender.id
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    # Using Ubuntu 20.04 container for native Python 2 and build tool compatibility
+    container:
+      image: ubuntu:20.04
+
     steps:
-    - name: Check Out
+    - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Cleanup Actions
-      uses: rokibhasansagar/slimhub_actions@main
-
-    - name: Install Build Packages (Legacy Noble Fix)
+    - name: Prepare Environment
       run: |
-        # Ubuntu 24.04 par python2 aur libncurses5 ke liye Focal repo zaroori hai
-        echo "deb http://archive.ubuntu.com/ubuntu/ focal main universe" | sudo tee -a /etc/apt/sources.list
-        sudo apt-get update
-        
-        # Essential packages only (Conflict-prone packages removed)
-        sudo apt-get -y install libncurses5 python2 python3 \
-        git ccache automake flex lzop bison gperf build-essential zip curl \
-        zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev \
-        libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool \
-        make optipng maven libssl-dev pwgen bc libc6-dev-i386 \
-        libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip \
-        device-tree-compiler libtinfo5
-        
-        # Build system ko python dhoondne mein help karo
-        sudo ln -sf /usr/bin/python2 /usr/bin/python
-        sudo ln -sf /usr/bin/python2 /usr/bin/python2
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update
+        apt-get install -y \
+          git-core gnupg flex bison gperf build-essential zip curl zlib1g-dev \
+          gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev x11proto-core-dev \
+          libx11-dev lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc unzip python2 \
+          bc liblz4-tool libssl-dev rsync maven wget lzip python3 python-is-python2
 
     - name: Install Google Repo
       run: |
-        mkdir ~/bin
+        mkdir -p ~/bin
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod a+x ~/bin/repo
-        sudo ln -sf ~/bin/repo /usr/bin/repo
+        ln -sf ~/bin/repo /usr/bin/repo
 
-    - name: Initialize Recovery Workspace
+    - name: Initialize & Sync
       run: |
         mkdir workspace
         cd workspace
         git config --global user.name "Ansh"
         git config --global user.email "ansh@example.com"
         repo init --depth=1 -u ${{ github.event.inputs.MANIFEST_URL }} -b ${{ github.event.inputs.MANIFEST_BRANCH }}
-      id: pwd
+        repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
 
-    - name: Sync Sources
-      run: repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
-      working-directory: workspace
-
-    - name: Clone Oppo A31 Tree
-      run: git clone ${{ github.event.inputs.DEVICE_TREE_URL }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
-      working-directory: workspace
-
-    - name: Set Swap (12GB)
-      uses: pierotofy/set-swap-space@master
-      with:
-        swap-size-gb: 12
+    - name: Clone Device Tree
+      run: |
+        cd workspace
+        git clone ${{ github.event.inputs.DEVICE_TREE_URL }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ${{ github.event.inputs.DEVICE_PATH }}
 
     - name: Build SHRP
       run: |
         cd workspace
-        source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
-        
+        source build/envsetup.sh
         lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng
-        echo "🏗️ Building ${{ github.event.inputs.DEVICE_NAME }}..."
-        mka ${{ github.event.inputs.BUILD_TARGET }} -j$(nproc --all)
+        mka recoveryimage -j$(nproc --all)
       shell: bash
 
-    - name: Upload Release
-      uses: softprops/action-gh-release@v2
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
       with:
-        files: |
+        name: SHRP-OppoA31
+        path: |
           workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/recovery.img
           workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/SHRP*.zip
-        name: SHRP-${{ github.event.inputs.DEVICE_NAME }}-${{ github.run_id }}
-        tag_name: ${{ github.run_id }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
