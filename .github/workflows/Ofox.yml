@@ -14,7 +14,7 @@ on:
       DEVICE_TREE_URL:
         description: 'DEVICE_TREE_URL'
         required: true
-        default: 'https://github.com/ansh-m14x/android-recovery-OP4C7D'
+        default: 'https://github.com/ansh-m14x/recovery-oppo-A31-OP4C7D'
       DEVICE_TREE_BRANCH:
         description: 'DEVICE_TREE_BRANCH'
         required: true
